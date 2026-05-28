@@ -1,3 +1,3 @@
-# app
+# Chosen Object
 
-A new Flutter project.
+A Flutter application.
