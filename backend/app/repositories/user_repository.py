@@ -51,3 +51,12 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def set_verification_pin(self, user: User, pin: str) -> None:
+        user.verification_pin = pin
+        self.db.commit()
+
+    def verify_email(self, user: User) -> None:
+        user.email_verified = True
+        user.verification_pin = None
+        self.db.commit()

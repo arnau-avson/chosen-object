@@ -97,7 +97,11 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   void _nextStep() {
     if (_step == 0 && !_step1Key.currentState!.validate()) return;
-    if (_step == 1 && !_step2Key.currentState!.validate()) return;
+    if (_step == 1) {
+      if (!_step2Key.currentState!.validate()) return;
+      _handleCreateAccount();
+      return;
+    }
     if (_step < 2) setState(() => _step++);
   }
 
@@ -105,13 +109,9 @@ class _RegisterScreenState extends State<RegisterScreen>
     if (_step > 0) setState(() => _step--);
   }
 
-  // ── Submit ──────────────────────────────────────────────────
+  // ── Create account (called at end of step 2) ───────────────
 
-  Future<void> _handleRegister() async {
-    if (_pinCtrl.text.trim().length < 6) {
-      _showError('Enter the 6-digit code');
-      return;
-    }
+  Future<void> _handleCreateAccount() async {
     setState(() => _isLoading = true);
     try {
       await AuthService.register(
@@ -123,6 +123,36 @@ class _RegisterScreenState extends State<RegisterScreen>
         lastName: _lastNameCtrl.text.trim(),
         city: _cityCtrl.text.trim(),
         country: _countryCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() => _step = 2);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 409) {
+        _showConflictModal(e.message);
+      } else {
+        _showError(e.message);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showError('Connection error. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ── Verify PIN (step 3) ─────────────────────────────────────
+
+  Future<void> _handleVerifyPin() async {
+    if (_pinCtrl.text.trim().length < 6) {
+      _showError('Enter the 6-digit code');
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await AuthService.verifyEmail(
+        email: _emailCtrl.text.trim(),
+        pin: _pinCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -145,6 +175,22 @@ class _RegisterScreenState extends State<RegisterScreen>
     }
   }
 
+  // ── Resend PIN ──────────────────────────────────────────────
+
+  Future<void> _handleResendPin() async {
+    try {
+      await AuthService.resendPin(email: _emailCtrl.text.trim());
+      if (!mounted) return;
+      _showSuccess('A new code has been generated.');
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      _showError(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showError('Connection error. Please try again.');
+    }
+  }
+
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -156,6 +202,95 @@ class _RegisterScreenState extends State<RegisterScreen>
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      ),
+    );
+  }
+
+  void _showSuccess(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          msg,
+          style: GoogleFonts.inter(fontSize: 13.5, color: AppColors.bone),
+        ),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      ),
+    );
+  }
+
+  void _showConflictModal(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.bone,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.hairline, width: 1),
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 24,
+                  color: AppColors.accent,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Account already exists',
+                style: GoogleFonts.fraunces(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.inkStrong,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13.5,
+                  color: AppColors.muted,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(ctx).pop(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.ink,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Got it',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.bone,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -689,9 +824,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         // Resend link
         Center(
           child: GestureDetector(
-            onTap: () {
-              _showError('Verification emails are not sent yet.');
-            },
+            onTap: _handleResendPin,
             child: Text(
               'Resend code',
               style: GoogleFonts.inter(
@@ -707,7 +840,7 @@ class _RegisterScreenState extends State<RegisterScreen>
 
         _ActionButton(
           label: 'Verify & create account',
-          onTap: _handleRegister,
+          onTap: _handleVerifyPin,
           isLoading: _isLoading,
           pressed: _buttonPressed,
           onPressedChanged: (v) => setState(() => _buttonPressed = v),

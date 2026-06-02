@@ -13,13 +13,24 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """El campo `identifier` acepta email o nombre de usuario;
-    el backend decide cuál es según si contiene '@'."""
-    identifier: str = Field(..., min_length=1, description="Email o nombre de usuario")
+    identifier: str = Field(..., min_length=1, description="Email or username")
     password: str = Field(..., min_length=1)
+
+
+class VerifyEmailRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    pin: str = Field(..., min_length=6, max_length=6)
+
+
+class ResendPinRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    expires_in: int = Field(..., description="Segundos hasta la expiración")
+    expires_in: int = Field(..., description="Seconds until expiration")
+
+
+class MessageResponse(BaseModel):
+    message: str

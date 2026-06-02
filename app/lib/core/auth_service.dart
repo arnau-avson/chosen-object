@@ -6,7 +6,8 @@ import 'constants.dart';
 
 class AuthException implements Exception {
   final String message;
-  const AuthException(this.message);
+  final int? statusCode;
+  const AuthException(this.message, {this.statusCode});
 }
 
 class AuthService {
@@ -29,7 +30,6 @@ class AuthService {
     await prefs.remove(_tokenKey);
   }
 
-  /// Devuelve true si hay un token válido y no ha expirado.
   static Future<bool> isAuthenticated() async {
     final token = await getToken();
     if (token == null) return false;
@@ -42,8 +42,8 @@ class AuthService {
 
   // ── API calls ─────────────────────────────────────────────
 
-  /// Registers a new account and saves the returned token.
-  /// Throws [AuthException] on validation or conflict errors.
+  /// Registers a new account. Does NOT return a token — the user
+  /// must verify their email first.
   static Future<void> register({
     required String email,
     required String username,
@@ -76,22 +76,75 @@ class AuthService {
       throw const AuthException('Connection error. Check your network.');
     }
 
-    if (response.statusCode == 201) {
+    if (response.statusCode == 201) return;
+
+    String detail = 'Could not create account';
+    int code = response.statusCode;
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      detail = body['detail'] as String? ?? detail;
+    } catch (_) {}
+    throw AuthException(detail, statusCode: code);
+  }
+
+  /// Verifies the email with a 6-digit PIN and saves the token.
+  static Future<void> verifyEmail({
+    required String email,
+    required String pin,
+  }) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse(ApiConstants.verifyEmail),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email, 'pin': pin}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      throw const AuthException('Connection error. Check your network.');
+    }
+
+    if (response.statusCode == 200) {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       await saveToken(body['access_token'] as String);
       return;
     }
 
-    String detail = 'Could not create account';
+    String detail = 'Verification failed';
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       detail = body['detail'] as String? ?? detail;
     } catch (_) {}
-    throw AuthException(detail);
+    throw AuthException(detail, statusCode: response.statusCode);
   }
 
-  /// Llama al endpoint de login y guarda el token.
-  /// Lanza [AuthException] si las credenciales son incorrectas.
+  /// Requests a new verification PIN for the given email.
+  static Future<void> resendPin({required String email}) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse(ApiConstants.resendPin),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      throw const AuthException('Connection error. Check your network.');
+    }
+
+    if (response.statusCode == 200) return;
+
+    String detail = 'Could not resend code';
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      detail = body['detail'] as String? ?? detail;
+    } catch (_) {}
+    throw AuthException(detail, statusCode: response.statusCode);
+  }
+
+  /// Signs in and saves the token.
   static Future<void> login({
     required String identifier,
     required String password,
@@ -115,12 +168,11 @@ class AuthService {
       return;
     }
 
-    // Extraer mensaje del backend si existe
     String detail = 'Invalid credentials';
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       detail = body['detail'] as String? ?? detail;
     } catch (_) {}
-    throw AuthException(detail);
+    throw AuthException(detail, statusCode: response.statusCode);
   }
 }

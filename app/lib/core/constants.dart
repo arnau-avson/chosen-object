@@ -1,8 +1,8 @@
-/// URL base de la API.
+/// Base API URL.
 ///
-/// En desarrollo no hace falta nada; en producción pásala al compilar:
-///   flutter run  --dart-define=API_BASE_URL=https://api.tudominio.com
-///   flutter build apk --dart-define=API_BASE_URL=https://api.tudominio.com
+/// In development nothing is needed; in production pass it at build time:
+///   flutter run  --dart-define=API_BASE_URL=https://api.yourdomain.com
+///   flutter build apk --dart-define=API_BASE_URL=https://api.yourdomain.com
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'http://localhost:8000', // Windows desktop / Web / iOS simulator
@@ -14,5 +14,7 @@ class ApiConstants {
 
   static const String login = '$baseUrl/api/v1/auth/login';
   static const String register = '$baseUrl/api/v1/auth/register';
+  static const String verifyEmail = '$baseUrl/api/v1/auth/verify-email';
+  static const String resendPin = '$baseUrl/api/v1/auth/resend-pin';
   static const String me = '$baseUrl/api/v1/auth/me';
 }
