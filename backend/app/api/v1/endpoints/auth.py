@@ -6,11 +6,24 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.user import UserOut
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=201,
+    summary="Create a new account",
+)
+def register(
+    data: RegisterRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> TokenResponse:
+    return AuthService(db).register(data)
 
 
 @router.post(

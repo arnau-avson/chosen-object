@@ -41,16 +41,13 @@ class AppTheme {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(color: AppColors.danger, width: 1),
+          borderSide: const BorderSide(color: AppColors.danger, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(4),
           borderSide: const BorderSide(color: AppColors.danger, width: 1.5),
         ),
-        errorStyle: GoogleFonts.inter(
-          fontSize: 11.5,
-          color: AppColors.danger,
-        ),
+        errorStyle: const TextStyle(fontSize: 0, height: 0),
         hintStyle: GoogleFonts.inter(
           fontSize: 14,
           color: AppColors.muted2,

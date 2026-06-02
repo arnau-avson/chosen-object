@@ -3,7 +3,11 @@
     "allow": [
       "Bash(flutter clean:*)",
       "Bash(flutter run:*)",
-      "Bash(dart analyze:*)"
+      "Bash(dart analyze:*)",
+      "Bash(python:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\arnau\\Desktop\\chosen-object\\app\\lib\\screens"
     ]
   }
 }

@@ -26,11 +26,26 @@ class UserRepository:
 
     # ── Mutaciones ───────────────────────────────────────────
 
-    def create(self, username: str, email: str, hashed_password: str) -> User:
+    def create(
+        self,
+        username: str,
+        email: str,
+        hashed_password: str,
+        role: str,
+        first_name: str = "",
+        last_name: str = "",
+        city: str = "",
+        country: str = "",
+    ) -> User:
         user = User(
             username=username.lower(),
             email=email.lower(),
             hashed_password=hashed_password,
+            role=role,
+            first_name=first_name or None,
+            last_name=last_name or None,
+            city=city or None,
+            country=country or None,
         )
         self.db.add(user)
         self.db.commit()

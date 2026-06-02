@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/auth_service.dart';
 import '../home/home_screen.dart';
+import '../onboarding/onboarding_screen.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -345,9 +346,15 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ),
                       GestureDetector(
-                        onTap: () {
-                          // TODO: navegar a registro
-                        },
+                        onTap: () => Navigator.of(context).push(
+                          PageRouteBuilder(
+                            pageBuilder: (_, _, _) => const OnboardingScreen(),
+                            transitionsBuilder: (_, anim, _, child) =>
+                                FadeTransition(opacity: anim, child: child),
+                            transitionDuration:
+                                const Duration(milliseconds: 300),
+                          ),
+                        ),
                         child: Text(
                           'Sign up',
                           style: GoogleFonts.inter(

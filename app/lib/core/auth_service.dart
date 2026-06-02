@@ -42,6 +42,54 @@ class AuthService {
 
   // ── API calls ─────────────────────────────────────────────
 
+  /// Registers a new account and saves the returned token.
+  /// Throws [AuthException] on validation or conflict errors.
+  static Future<void> register({
+    required String email,
+    required String username,
+    required String password,
+    required String role,
+    String firstName = '',
+    String lastName = '',
+    String city = '',
+    String country = '',
+  }) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse(ApiConstants.register),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email,
+              'username': username,
+              'password': password,
+              'role': role,
+              'first_name': firstName,
+              'last_name': lastName,
+              'city': city,
+              'country': country,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      throw const AuthException('Connection error. Check your network.');
+    }
+
+    if (response.statusCode == 201) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      await saveToken(body['access_token'] as String);
+      return;
+    }
+
+    String detail = 'Could not create account';
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      detail = body['detail'] as String? ?? detail;
+    } catch (_) {}
+    throw AuthException(detail);
+  }
+
   /// Llama al endpoint de login y guarda el token.
   /// Lanza [AuthException] si las credenciales son incorrectas.
   static Future<void> login({
