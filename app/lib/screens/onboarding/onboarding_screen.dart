@@ -2,7 +2,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../auth/login_screen.dart';
 import '../auth/role_selection_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -40,7 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  void _skip() => _replace(const LoginScreen());
+  void _skip() => _replace(const RoleSelectionScreen());
 
   void _continue() => _replace(const RoleSelectionScreen());
 

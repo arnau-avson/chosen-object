@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
 import '../core/auth_service.dart';
 import '../screens/auth/login_screen.dart';
+import '../screens/home/home_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -307,6 +308,27 @@ class _ItemWidget extends StatelessWidget {
   final bool isActive;
   const _ItemWidget({required this.item, required this.isActive});
 
+  void _navigateTo(BuildContext context, String route) {
+    if (isActive) return;
+
+    Widget? screen;
+    switch (route) {
+      case '/home':
+        screen = const HomeScreen();
+    }
+
+    if (screen != null) {
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, _, _) => screen!,
+          transitionsBuilder: (_, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -316,7 +338,7 @@ class _ItemWidget extends StatelessWidget {
         highlightColor: AppColors.ink.withValues(alpha: 0.04),
         onTap: () {
           Navigator.of(context).pop();
-          // TODO: navegar a ${item.route}
+          _navigateTo(context, item.route);
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
