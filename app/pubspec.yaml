@@ -9,6 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  google_fonts: ^6.2.1
+  shared_preferences: ^2.3.3
+  jwt_decoder: ^2.0.1
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:

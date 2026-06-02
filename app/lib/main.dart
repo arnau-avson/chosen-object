@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'core/app_theme.dart';
+import 'screens/splash_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const ChosenObjectApp());
 }
 
@@ -9,12 +12,11 @@ class ChosenObjectApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Hello World!'),
-        ),
-      ),
+    return MaterialApp(
+      title: 'Chosen Object',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      home: const SplashScreen(),
     );
   }
 }
