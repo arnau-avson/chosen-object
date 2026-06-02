@@ -76,98 +76,116 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: AppColors.bone,
       drawer: const AppDrawer(currentRoute: '/home'),
       appBar: AppBar(
-        // ── Title area: crossfade between wordmark and search field ──
-        title: Stack(
-          alignment: Alignment.centerLeft,
-          children: [
-            // Wordmark fades out
-            IgnorePointer(
-              ignoring: _searchActive,
-              child: FadeTransition(
-                opacity: _titleFade,
-                child: const Text('Chosen Object'),
-              ),
-            ),
-            // Search field slides+fades in
-            IgnorePointer(
-              ignoring: !_searchActive,
-              child: FadeTransition(
-                opacity: _searchFade,
-                child: SlideTransition(
-                  position: _searchSlide,
-                  child: TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    textInputAction: TextInputAction.search,
-                    style: GoogleFonts.inter(
-                        fontSize: 14.5, color: AppColors.inkStrong),
-                    decoration: InputDecoration(
-                      hintText: 'Search...',
-                      hintStyle: GoogleFonts.inter(
-                          fontSize: 14.5, color: AppColors.muted),
-                      filled: true,
-                      fillColor: Colors.white,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        borderSide:
-                            const BorderSide(color: AppColors.ink, width: 1.5),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        borderSide:
-                            const BorderSide(color: AppColors.ink, width: 1.5),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        color: AppColors.muted,
-                        onPressed: _closeSearch,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Row(
+            children: [
+              // ── Expanded area: wordmark ↔ search field ──────────
+              Expanded(
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    // Wordmark fades out
+                    IgnorePointer(
+                      ignoring: _searchActive,
+                      child: FadeTransition(
+                        opacity: _titleFade,
+                        child: const Text('Chosen Object'),
                       ),
                     ),
-                    onSubmitted: (_) {},
+                    // Search field slides+fades in
+                    IgnorePointer(
+                      ignoring: !_searchActive,
+                      child: FadeTransition(
+                        opacity: _searchFade,
+                        child: SlideTransition(
+                          position: _searchSlide,
+                          child: TextField(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            textInputAction: TextInputAction.search,
+                            style: GoogleFonts.inter(
+                                fontSize: 14.5, color: AppColors.inkStrong),
+                            decoration: InputDecoration(
+                              hintText: 'Search...',
+                              hintStyle: GoogleFonts.inter(
+                                  fontSize: 14.5, color: AppColors.muted),
+                              filled: true,
+                              fillColor: Colors.white,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(999),
+                                borderSide: const BorderSide(
+                                    color: AppColors.ink, width: 1.0),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(999),
+                                borderSide: const BorderSide(
+                                    color: AppColors.ink, width: 1.0),
+                              ),
+                              suffixIcon: IconButton(
+                                icon:
+                                    const Icon(Icons.close_rounded, size: 18),
+                                color: AppColors.muted,
+                                onPressed: _closeSearch,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ),
+                            onSubmitted: (_) {},
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // ── Action icons collapse as search opens ────────────
+              SizeTransition(
+                sizeFactor: _titleFade,
+                axis: Axis.horizontal,
+                axisAlignment: 1,
+                child: IgnorePointer(
+                  ignoring: _searchActive,
+                  child: FadeTransition(
+                    opacity: _titleFade,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.search_outlined, size: 21),
+                          tooltip: 'Search',
+                          color: AppColors.inkSoft,
+                          onPressed: _openSearch,
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                              Icons.bookmark_border_rounded,
+                              size: 21),
+                          tooltip: 'Saved',
+                          color: AppColors.inkSoft,
+                          onPressed: () {},
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                              Icons.notifications_none_rounded,
+                              size: 22),
+                          tooltip: 'Notifications',
+                          color: AppColors.inkSoft,
+                          onPressed: () => _showNotificationsModal(context),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        // ── Actions: fade out when search opens ──
-        actions: [
-          IgnorePointer(
-            ignoring: _searchActive,
-            child: FadeTransition(
-              opacity: _titleFade,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.search_outlined, size: 21),
-                    tooltip: 'Search',
-                    color: AppColors.inkSoft,
-                    onPressed: _openSearch,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.bookmark_border_rounded, size: 21),
-                    tooltip: 'Saved',
-                    color: AppColors.inkSoft,
-                    onPressed: () {},
-                  ),
-                  IconButton(
-                    icon:
-                        const Icon(Icons.notifications_none_rounded, size: 22),
-                    tooltip: 'Notifications',
-                    color: AppColors.inkSoft,
-                    onPressed: () => _showNotificationsModal(context),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
+        actions: const [],
       ),
       body: Center(
         child: Text(
