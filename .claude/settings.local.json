@@ -4,7 +4,16 @@
       "Bash(flutter clean:*)",
       "Bash(flutter run:*)",
       "Bash(dart analyze:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(flutter pub add:*)",
+      "WebFetch(domain:docs.fleaflet.dev)",
+      "WebFetch(domain:pub.dev)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter pub:*)",
+      "Bash(dart run:*)",
+      "Read(//c/Users/arnau/**)",
+      "Bash(dart pub cache:*)",
+      "WebFetch(domain:github.com)"
     ],
     "additionalDirectories": [
       "C:\\Users\\arnau\\Desktop\\chosen-object\\app\\lib\\screens"

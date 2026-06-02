@@ -68,9 +68,20 @@ class _SharedAppBarState extends State<SharedAppBar>
   }
 
   void _showNotificationsModal(BuildContext context) {
-    showDialog<void>(
+    showGeneralDialog<void>(
       context: context,
-      builder: (_) => const _NotificationsModal(),
+      barrierDismissible: true,
+      barrierLabel: 'Notifications',
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      transitionDuration: const Duration(milliseconds: 260),
+      transitionBuilder: (_, anim, _, child) {
+        final curve = CurvedAnimation(parent: anim, curve: Curves.easeOut);
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.92, end: 1.0).animate(curve),
+          child: FadeTransition(opacity: curve, child: child),
+        );
+      },
+      pageBuilder: (_, _, _) => const _NotificationsModal(),
     );
   }
 

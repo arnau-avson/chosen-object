@@ -6,8 +6,46 @@ import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
 import '../product_detail/product_detail_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  Animation<double> _fade(double start, double end) => CurvedAnimation(
+        parent: _anim,
+        curve: Interval(start.clamp(0, 1), end.clamp(0, 1),
+            curve: Curves.easeOut),
+      );
+
+  Animation<Offset> _slide(double start, double end) =>
+      Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(
+        CurvedAnimation(
+          parent: _anim,
+          curve: Interval(start.clamp(0, 1), end.clamp(0, 1),
+              curve: Curves.easeOut),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -19,9 +57,21 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SeasonHeader(),
+            FadeTransition(
+              opacity: _fade(0.0, 0.5),
+              child: SlideTransition(
+                position: _slide(0.0, 0.5),
+                child: const _SeasonHeader(),
+              ),
+            ),
             const SizedBox(height: 28),
-            const _ProductGrid(),
+            FadeTransition(
+              opacity: _fade(0.2, 0.7),
+              child: SlideTransition(
+                position: _slide(0.2, 0.7),
+                child: const _ProductGrid(),
+              ),
+            ),
             const SizedBox(height: 32),
           ],
         ),
