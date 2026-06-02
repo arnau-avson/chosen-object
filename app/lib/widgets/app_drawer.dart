@@ -5,6 +5,7 @@ import '../core/auth_service.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/map/map_screen.dart';
+import '../screens/search/search_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -318,6 +319,8 @@ class _ItemWidget extends StatelessWidget {
         screen = const HomeScreen();
       case '/map':
         screen = const MapScreen();
+      case '/search':
+        screen = const SearchScreen();
     }
 
     if (screen != null) {

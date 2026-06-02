@@ -1,0 +1,942 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../core/app_colors.dart';
+import '../../models/product.dart';
+import '../../widgets/app_drawer.dart';
+import '../../widgets/shared_app_bar.dart';
+import '../product_detail/product_detail_screen.dart';
+
+// ── Mock user data ─────────────────────────────────────────────
+
+class _MockUser {
+  final String name;
+  final String handle;
+  final String location;
+  final String role;
+  final Color avatarColor;
+
+  const _MockUser({
+    required this.name,
+    required this.handle,
+    required this.location,
+    required this.role,
+    required this.avatarColor,
+  });
+}
+
+const _mockUsers = <_MockUser>[
+  _MockUser(
+    name: 'Elena Martí',
+    handle: '@elenamarti',
+    location: 'Barcelona, ES',
+    role: 'Ceramic artist',
+    avatarColor: Color(0xFFB8543C),
+  ),
+  _MockUser(
+    name: 'Jordi Canudas',
+    handle: '@jcanudas',
+    location: 'Girona, ES',
+    role: 'Furniture designer',
+    avatarColor: Color(0xFF6B7A5A),
+  ),
+  _MockUser(
+    name: 'Marta Sala',
+    handle: '@martasala',
+    location: 'Barcelona, ES',
+    role: 'Ceramic artist',
+    avatarColor: Color(0xFFA8893E),
+  ),
+  _MockUser(
+    name: 'Pau Vives',
+    handle: '@pauvives',
+    location: 'Valencia, ES',
+    role: 'Textile designer',
+    avatarColor: Color(0xFF9A8C7B),
+  ),
+  _MockUser(
+    name: 'Laia Font',
+    handle: '@laiafont',
+    location: 'Madrid, ES',
+    role: 'Interior architect',
+    avatarColor: Color(0xFF2E2520),
+  ),
+  _MockUser(
+    name: 'Nuria Coll',
+    handle: '@nuriacoll',
+    location: 'Seville, ES',
+    role: 'Curator',
+    avatarColor: Color(0xFFB3A594),
+  ),
+  _MockUser(
+    name: 'Marc Esteve',
+    handle: '@marcesteve',
+    location: 'Terrassa, ES',
+    role: 'Sculptor',
+    avatarColor: Color(0xFF8A7D6A),
+  ),
+  _MockUser(
+    name: 'Anna Riera',
+    handle: '@annariera',
+    location: 'Milan, IT',
+    role: 'Lighting designer',
+    avatarColor: Color(0xFFC2B5A2),
+  ),
+];
+
+// ── Search Screen ──────────────────────────────────────────────
+
+class SearchScreen extends StatefulWidget {
+  const SearchScreen({super.key});
+
+  @override
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim;
+  final _searchController = TextEditingController();
+  bool _showUsers = false; // false = Products, true = Users
+
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Animation<double> _fade(double start, double end) => CurvedAnimation(
+        parent: _anim,
+        curve: Interval(start.clamp(0, 1), end.clamp(0, 1),
+            curve: Curves.easeOut),
+      );
+
+  Animation<Offset> _slide(double start, double end) =>
+      Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(
+        CurvedAnimation(
+          parent: _anim,
+          curve: Interval(start.clamp(0, 1), end.clamp(0, 1),
+              curve: Curves.easeOut),
+        ),
+      );
+
+  String get _query => _searchController.text.trim().toLowerCase();
+
+  List<Product> get _filteredProducts {
+    if (_query.isEmpty) return mockProducts;
+    return mockProducts.where((p) {
+      return p.name.toLowerCase().contains(_query) ||
+          p.designer.toLowerCase().contains(_query);
+    }).toList();
+  }
+
+  List<_MockUser> get _filteredUsers {
+    if (_query.isEmpty) return _mockUsers;
+    return _mockUsers.where((u) {
+      return u.name.toLowerCase().contains(_query) ||
+          u.handle.toLowerCase().contains(_query);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bone,
+      drawer: const AppDrawer(currentRoute: '/search'),
+      appBar: const SharedAppBar(
+        currentRoute: '/search',
+        hideSearchIcon: true,
+      ),
+      body: CustomScrollView(
+        slivers: [
+          // ── Search bar ──
+          SliverToBoxAdapter(
+            child: FadeTransition(
+              opacity: _fade(0.0, 0.4),
+              child: SlideTransition(
+                position: _slide(0.0, 0.4),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    style: GoogleFonts.inter(
+                      fontSize: 14.5,
+                      color: AppColors.inkStrong,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: _showUsers ? 'Search users...' : 'Search products...',
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 14.5,
+                        color: AppColors.muted,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(left: 12, right: 8),
+                        child: Icon(
+                          Icons.search_outlined,
+                          size: 20,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 0,
+                        minHeight: 0,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: const BorderSide(
+                          color: AppColors.hairline,
+                          width: 1.0,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: const BorderSide(
+                          color: AppColors.ink,
+                          width: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+          // ── Toggle tabs + filters button ──
+          SliverToBoxAdapter(
+            child: FadeTransition(
+              opacity: _fade(0.1, 0.5),
+              child: SlideTransition(
+                position: _slide(0.1, 0.5),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _TabLabel(
+                        label: 'Products',
+                        active: !_showUsers,
+                        onTap: () => setState(() => _showUsers = false),
+                      ),
+                      const SizedBox(width: 28),
+                      _TabLabel(
+                        label: 'Users',
+                        active: _showUsers,
+                        onTap: () => setState(() => _showUsers = true),
+                      ),
+                      const Spacer(),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        transitionBuilder: (child, anim) => FadeTransition(
+                          opacity: anim,
+                          child: SizeTransition(
+                            sizeFactor: anim,
+                            axis: Axis.horizontal,
+                            axisAlignment: 1,
+                            child: child,
+                          ),
+                        ),
+                        child: !_showUsers
+                            ? GestureDetector(
+                                key: const ValueKey('filters-btn'),
+                                onTap: () => showModalBottomSheet<void>(
+                                  context: context,
+                                  backgroundColor: Colors.transparent,
+                                  isScrollControlled: true,
+                                  builder: (_) => const _FiltersModal(),
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                        color: AppColors.hairline, width: 1),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.tune_rounded,
+                                        size: 14,
+                                        color: AppColors.inkSoft,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        'Filters',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.inkSoft,
+                                          letterSpacing: 0.2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : const SizedBox.shrink(
+                                key: ValueKey('filters-empty')),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+          // ── List content ──
+          SliverToBoxAdapter(
+            child: _showUsers
+                ? _UsersListBox(
+                    key: ValueKey('users-${_filteredUsers.length}'),
+                    users: _filteredUsers,
+                  )
+                : _ProductsGridBox(
+                    key: ValueKey('products-${_filteredProducts.length}'),
+                    products: _filteredProducts,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Tab label (underlined editorial style) ─────────────────────
+
+class _TabLabel extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _TabLabel({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              label,
+              style: GoogleFonts.fraunces(
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+                color: active ? AppColors.inkStrong : AppColors.muted,
+              ),
+            ),
+          ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            height: 1.5,
+            width: active ? 32 : 0,
+            color: AppColors.accent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Products grid box (staggered entrance) ────────────────────
+
+class _ProductsGridBox extends StatefulWidget {
+  final List<Product> products;
+  const _ProductsGridBox({super.key, required this.products});
+
+  @override
+  State<_ProductsGridBox> createState() => _ProductsGridBoxState();
+}
+
+class _ProductsGridBoxState extends State<_ProductsGridBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final products = widget.products;
+    if (products.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 64),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_off_rounded, size: 36, color: AppColors.hairline2),
+            const SizedBox(height: 12),
+            Text('No products found',
+                style: GoogleFonts.inter(fontSize: 14, color: AppColors.muted)),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: products.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 24,
+          childAspectRatio: 0.58,
+        ),
+        itemBuilder: (_, i) {
+          final start = (i * 0.07).clamp(0.0, 0.55);
+          final end = (start + 0.45).clamp(0.0, 1.0);
+          final curve = CurvedAnimation(
+            parent: _ctrl,
+            curve: Interval(start, end, curve: Curves.easeOut),
+          );
+          return FadeTransition(
+            opacity: curve,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.12),
+                end: Offset.zero,
+              ).animate(curve),
+              child: _ProductCard(product: products[i]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Users list box (staggered entrance) ───────────────────────
+
+class _UsersListBox extends StatefulWidget {
+  final List<_MockUser> users;
+  const _UsersListBox({super.key, required this.users});
+
+  @override
+  State<_UsersListBox> createState() => _UsersListBoxState();
+}
+
+class _UsersListBoxState extends State<_UsersListBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final users = widget.users;
+    if (users.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 64),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.person_search_rounded, size: 36, color: AppColors.hairline2),
+            const SizedBox(height: 12),
+            Text('No users found',
+                style: GoogleFonts.inter(fontSize: 14, color: AppColors.muted)),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: List.generate(users.length * 2 - 1, (index) {
+          if (index.isOdd) {
+            return const Divider(
+                color: AppColors.hairline, height: 1, thickness: 1);
+          }
+          final i = index ~/ 2;
+          final start = (i * 0.07).clamp(0.0, 0.55);
+          final end = (start + 0.45).clamp(0.0, 1.0);
+          final curve = CurvedAnimation(
+            parent: _ctrl,
+            curve: Interval(start, end, curve: Curves.easeOut),
+          );
+          final fade = curve;
+          final slide = Tween<Offset>(
+            begin: const Offset(0, 0.15),
+            end: Offset.zero,
+          ).animate(curve);
+          return FadeTransition(
+            opacity: fade,
+            child: SlideTransition(
+              position: slide,
+              child: _UserRow(user: users[i]),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+// ── Product card (same as HomeScreen) ─────────────────────────
+
+class _ProductCard extends StatefulWidget {
+  final Product product;
+  const _ProductCard({required this.product});
+
+  @override
+  State<_ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends State<_ProductCard> {
+  int _currentPage = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final images = widget.product.images;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          PageRouteBuilder(
+            pageBuilder: (_, _, _) =>
+                ProductDetailScreen(productId: widget.product.id),
+            transitionsBuilder: (_, animation, _, child) =>
+                FadeTransition(opacity: animation, child: child),
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    itemCount: images.length,
+                    onPageChanged: (p) => setState(() => _currentPage = p),
+                    itemBuilder: (_, i) => Container(color: images[i]),
+                  ),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface.withValues(alpha: 0.78),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        widget.product.tag,
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.inkSoft,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (images.length > 1)
+                    Positioned(
+                      bottom: 10,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(images.length, (i) {
+                          final active = i == _currentPage;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: active ? 6 : 5,
+                            height: active ? 6 : 5,
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: active
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.45),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            widget.product.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.inkStrong,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${widget.product.designer} · ${widget.product.year}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: AppColors.muted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.product.price,
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: AppColors.inkSoft,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── User row ──────────────────────────────────────────────────
+
+class _UserRow extends StatelessWidget {
+  final _MockUser user;
+
+  const _UserRow({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        children: [
+          // Circular avatar
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: user.avatarColor,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              user.name.split(' ').map((w) => w[0]).take(2).join(),
+              style: GoogleFonts.fraunces(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Name + handle
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.fraunces(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.inkStrong,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  user.handle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Role + location aligned right, stacked vertically
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                user.role,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.inkSoft,
+                  letterSpacing: 0.1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.location_on_outlined,
+                    size: 12,
+                    color: AppColors.muted,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    user.location.split(',').first,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Filters modal ─────────────────────────────────────────────
+
+class _FiltersModal extends StatefulWidget {
+  const _FiltersModal();
+
+  @override
+  State<_FiltersModal> createState() => _FiltersModalState();
+}
+
+class _FiltersModalState extends State<_FiltersModal> {
+  static const _types = ['All', 'Buy', 'Rent', 'Buy or Rent'];
+  int _selectedType = 0;
+
+  static const _categories = [
+    'All', 'Painting', 'Sculpture', 'Furniture', 'Lighting',
+    'Watercolour', 'Ceramic', 'Decor', 'Textiles', 'Mixed media',
+  ];
+  final Set<int> _selectedCategories = {0};
+
+  static const _sortOptions = ['Relevance', 'Price ↑', 'Price ↓', 'Newest'];
+  int _selectedSort = 0;
+
+  RangeValues _priceRange = const RangeValues(0, 1500);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.hairline,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Text('Filters', style: GoogleFonts.fraunces(
+                fontSize: 20, fontWeight: FontWeight.w400, color: AppColors.inkStrong,
+              )),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: const Icon(Icons.close_rounded, size: 20, color: AppColors.muted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Container(height: 1, color: AppColors.hairline),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 20),
+                  _sectionLabel('TYPE'),
+                  const SizedBox(height: 12),
+                  _chipRow(_types, (i) => _selectedType == i, (i) => setState(() => _selectedType = i)),
+
+                  const SizedBox(height: 24),
+                  Row(children: [
+                    _sectionLabel('PRICE RANGE'),
+                    const Spacer(),
+                    Text('€${_priceRange.start.round()} – €${_priceRange.end.round()}',
+                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.inkSoft)),
+                  ]),
+                  const SizedBox(height: 4),
+                  SliderTheme(
+                    data: SliderThemeData(
+                      activeTrackColor: AppColors.ink,
+                      inactiveTrackColor: AppColors.hairline,
+                      thumbColor: AppColors.ink,
+                      overlayColor: AppColors.ink.withValues(alpha: 0.08),
+                      trackHeight: 2,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      rangeThumbShape: const RoundRangeSliderThumbShape(enabledThumbRadius: 7),
+                    ),
+                    child: RangeSlider(
+                      values: _priceRange, min: 0, max: 3000, divisions: 60,
+                      onChanged: (v) => setState(() => _priceRange = v),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+                  _sectionLabel('SORT BY'),
+                  const SizedBox(height: 12),
+                  _chipRow(_sortOptions, (i) => _selectedSort == i, (i) => setState(() => _selectedSort = i)),
+
+                  const SizedBox(height: 24),
+                  _sectionLabel('CATEGORY'),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8, runSpacing: 10,
+                    children: List.generate(_categories.length, (i) {
+                      final active = _selectedCategories.contains(i);
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (i == 0) {
+                              _selectedCategories..clear()..add(0);
+                            } else {
+                              _selectedCategories.remove(0);
+                              if (active) {
+                                _selectedCategories.remove(i);
+                                if (_selectedCategories.isEmpty) _selectedCategories.add(0);
+                              } else {
+                                _selectedCategories.add(i);
+                              }
+                            }
+                          });
+                        },
+                        child: _chip(_categories[i], active),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 28),
+                ],
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              decoration: BoxDecoration(
+                color: AppColors.ink,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              alignment: Alignment.center,
+              child: Text('Apply filters', style: GoogleFonts.inter(
+                fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.bone, letterSpacing: 0.1,
+              )),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) => Text(text, style: GoogleFonts.inter(
+    fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted, letterSpacing: 1.4,
+  ));
+
+  Widget _chipRow(List<String> items, bool Function(int) isActive, void Function(int) onTap) {
+    return Wrap(
+      spacing: 8, runSpacing: 10,
+      children: List.generate(items.length, (i) => GestureDetector(
+        onTap: () => onTap(i),
+        child: _chip(items[i], isActive(i)),
+      )),
+    );
+  }
+
+  Widget _chip(String label, bool active) => AnimatedContainer(
+    duration: const Duration(milliseconds: 180),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+    decoration: BoxDecoration(
+      color: active ? AppColors.ink : Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: active ? AppColors.ink : AppColors.hairline, width: 1),
+    ),
+    child: Text(label, style: GoogleFonts.inter(
+      fontSize: 12.5,
+      fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+      color: active ? AppColors.bone : AppColors.inkSoft,
+      letterSpacing: 0.1,
+    )),
+  );
+}
