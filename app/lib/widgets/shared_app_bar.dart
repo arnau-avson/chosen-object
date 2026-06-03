@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
+import '../screens/collection/collection_screen.dart';
 
 class SharedAppBar extends StatefulWidget implements PreferredSizeWidget {
   final String? currentRoute;
@@ -194,7 +195,21 @@ class _SharedAppBarState extends State<SharedAppBar>
                             size: 21),
                         tooltip: 'Saved',
                         color: AppColors.inkSoft,
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, _, _) =>
+                                  const CollectionScreen(),
+                              transitionsBuilder:
+                                  (_, animation, _, child) =>
+                                      FadeTransition(
+                                          opacity: animation,
+                                          child: child),
+                              transitionDuration:
+                                  const Duration(milliseconds: 300),
+                            ),
+                          );
+                        },
                       ),
                       IconButton(
                         icon: const Icon(

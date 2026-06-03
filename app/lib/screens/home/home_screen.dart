@@ -4,7 +4,9 @@ import '../../core/app_colors.dart';
 import '../../models/product.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
+import '../../widgets/save_to_collection_modal.dart';
 import '../../widgets/shared_app_bar.dart';
+import '../../core/collection_service.dart';
 import '../product_detail/product_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -666,7 +668,6 @@ class _ProductCard extends StatefulWidget {
 
 class _ProductCardState extends State<_ProductCard> {
   int _currentPage = 0;
-  bool _saved = false;
 
   void _openDetail() {
     Navigator.of(context).push(
@@ -804,24 +805,35 @@ class _ProductCardState extends State<_ProductCard> {
                   ],
                 ),
               ),
-              GestureDetector(
-                onTap: () => setState(() => _saved = !_saved),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 4, top: 1),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    transitionBuilder: (child, anim) =>
-                        ScaleTransition(scale: anim, child: child),
-                    child: Icon(
-                      _saved
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      key: ValueKey(_saved),
-                      size: 18,
-                      color: _saved ? AppColors.accent : AppColors.muted,
+              ListenableBuilder(
+                listenable: CollectionService.instance,
+                builder: (context, _) {
+                  final saved = CollectionService.instance
+                      .isProductSaved(widget.product.id);
+                  return GestureDetector(
+                    onTap: () => CollectionService.instance
+                        .toggleSaved(widget.product.id),
+                    onLongPress: () => SaveToCollectionModal.show(
+                        context, widget.product.id),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4, top: 1),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, anim) =>
+                            ScaleTransition(scale: anim, child: child),
+                        child: Icon(
+                          saved
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          key: ValueKey(saved),
+                          size: 18,
+                          color:
+                              saved ? AppColors.accent : AppColors.muted,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           ),

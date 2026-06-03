@@ -6,6 +6,8 @@ import '../screens/auth/login_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/map/map_screen.dart';
 import '../screens/search/search_screen.dart';
+import '../screens/collection/collection_screen.dart';
+import '../screens/studios/studios_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -30,7 +32,7 @@ class _AppDrawerState extends State<AppDrawer>
       _Item('Studios',         Icons.storefront_outlined,           '/studios'),
     ]),
     _Section('Activity', [
-      _Item('Collection',      Icons.grid_view_outlined,            '/collection',    badge: 0),
+      _Item('Collection',      Icons.bookmark_border_rounded,       '/collection',    badge: 0),
       _Item('Messages',        Icons.chat_bubble_outline_rounded,   '/messages',      badge: 2),
       _Item('Orders',          Icons.receipt_long_outlined,         '/orders'),
       _Item('Notifications',   Icons.notifications_none_rounded,    '/notifications'),
@@ -321,6 +323,10 @@ class _ItemWidget extends StatelessWidget {
         screen = const MapScreen();
       case '/search':
         screen = const SearchScreen();
+      case '/studios':
+        screen = const StudiosScreen();
+      case '/collection':
+        screen = const CollectionScreen();
     }
 
     if (screen != null) {

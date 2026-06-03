@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
+import '../../models/user_profile.dart';
+import '../../core/collection_service.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/save_to_collection_modal.dart';
+import '../profile/user_profile_screen.dart';
 import '../../widgets/shared_app_bar.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -15,7 +19,6 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int _currentPage = 0;
-  bool _saved = false;
   bool _descExpanded = false;
   final _pageCtrl = PageController();
 
@@ -215,16 +218,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                   const Spacer(),
                   // Save button
-                  GestureDetector(
-                    onTap: () => setState(() => _saved = !_saved),
-                    child: Icon(
-                      _saved
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      size: 22,
-                      color:
-                          _saved ? AppColors.inkStrong : AppColors.inkSoft,
-                    ),
+                  ListenableBuilder(
+                    listenable: CollectionService.instance,
+                    builder: (context, _) {
+                      final saved = CollectionService.instance
+                          .isProductSaved(widget.productId);
+                      return GestureDetector(
+                        onTap: () => CollectionService.instance
+                            .toggleSaved(widget.productId),
+                        onLongPress: () => SaveToCollectionModal.show(
+                            context, widget.productId),
+                        child: Icon(
+                          saved
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          size: 22,
+                          color: saved
+                              ? AppColors.inkStrong
+                              : AppColors.inkSoft,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -280,61 +294,94 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Row(
                 children: [
-                  // Avatar placeholder
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.hairline,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      product.designer[0],
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkSoft,
+                  // Avatar + name tappable area
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        final profile =
+                            findProfileByName(product.designer);
+                        if (profile != null) {
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, _, _) =>
+                                  UserProfileScreen(
+                                      userId: profile.id),
+                              transitionsBuilder:
+                                  (_, animation, _, child) =>
+                                      FadeTransition(
+                                          opacity: animation,
+                                          child: child),
+                              transitionDuration:
+                                  const Duration(milliseconds: 300),
+                            ),
+                          );
+                        }
+                      },
+                      child: Row(
+                        children: [
+                          // Avatar placeholder
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppColors.hairline,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              product.designer[0],
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      product.designer,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.inkStrong,
+                                      ),
+                                    ),
+                                    if (product.verified) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(Icons.verified,
+                                          size: 14, color: AppColors.sage),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  [
+                                    if (product.location != null)
+                                      product.location!,
+                                    if (product.category != null)
+                                      product.category!,
+                                  ].join(' · '),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w400,
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              product.designer,
-                              style: GoogleFonts.inter(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.inkStrong,
-                              ),
-                            ),
-                            if (product.verified) ...[
-                              const SizedBox(width: 4),
-                              Icon(Icons.verified,
-                                  size: 14, color: AppColors.sage),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          [
-                            if (product.location != null) product.location!,
-                            if (product.category != null) product.category!,
-                          ].join(' · '),
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   // Follow button
                   Container(
                     padding: const EdgeInsets.symmetric(

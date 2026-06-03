@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
+import '../../models/user_profile.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/shared_app_bar.dart';
+import '../../core/collection_service.dart';
+import '../../widgets/save_to_collection_modal.dart';
 import '../product_detail/product_detail_screen.dart';
+import '../profile/user_profile_screen.dart';
 
 // ── Mock user data ─────────────────────────────────────────────
 
@@ -633,7 +637,6 @@ class _ProductCard extends StatefulWidget {
 
 class _ProductCardState extends State<_ProductCard> {
   int _currentPage = 0;
-  bool _saved = false;
 
   void _openDetail() {
     Navigator.of(context).push(
@@ -760,24 +763,35 @@ class _ProductCardState extends State<_ProductCard> {
                   ],
                 ),
               ),
-              GestureDetector(
-                onTap: () => setState(() => _saved = !_saved),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 4, top: 1),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    transitionBuilder: (child, anim) =>
-                        ScaleTransition(scale: anim, child: child),
-                    child: Icon(
-                      _saved
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      key: ValueKey(_saved),
-                      size: 18,
-                      color: _saved ? AppColors.accent : AppColors.muted,
+              ListenableBuilder(
+                listenable: CollectionService.instance,
+                builder: (context, _) {
+                  final saved = CollectionService.instance
+                      .isProductSaved(widget.product.id);
+                  return GestureDetector(
+                    onTap: () => CollectionService.instance
+                        .toggleSaved(widget.product.id),
+                    onLongPress: () => SaveToCollectionModal.show(
+                        context, widget.product.id),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4, top: 1),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, anim) =>
+                            ScaleTransition(scale: anim, child: child),
+                        child: Icon(
+                          saved
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          key: ValueKey(saved),
+                          size: 18,
+                          color:
+                              saved ? AppColors.accent : AppColors.muted,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           ),
@@ -796,95 +810,112 @@ class _UserRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        children: [
-          // Circular avatar
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: user.avatarColor,
-              shape: BoxShape.circle,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        final profile = findProfileByName(user.name);
+        if (profile != null) {
+          Navigator.of(context).push(
+            PageRouteBuilder(
+              pageBuilder: (_, _, _) =>
+                  UserProfileScreen(userId: profile.id),
+              transitionsBuilder: (_, animation, _, child) =>
+                  FadeTransition(opacity: animation, child: child),
+              transitionDuration: const Duration(milliseconds: 300),
             ),
-            alignment: Alignment.center,
-            child: Text(
-              user.name.split(' ').map((w) => w[0]).take(2).join(),
-              style: GoogleFonts.fraunces(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: Colors.white.withValues(alpha: 0.85),
+          );
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Row(
+          children: [
+            // Circular avatar
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: user.avatarColor,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                user.name.split(' ').map((w) => w[0]).take(2).join(),
+                style: GoogleFonts.fraunces(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 14),
-          // Name + handle
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  user.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.fraunces(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.inkStrong,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  user.handle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Role + location aligned right, stacked vertically
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                user.role,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.inkSoft,
-                  letterSpacing: 0.1,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+            const SizedBox(width: 14),
+            // Name + handle
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.location_on_outlined,
-                    size: 12,
-                    color: AppColors.muted,
-                  ),
-                  const SizedBox(width: 2),
                   Text(
-                    user.location.split(',').first,
+                    user.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.fraunces(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.inkStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    user.handle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
-                      fontSize: 11,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w400,
                       color: AppColors.muted,
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(width: 12),
+            // Role + location aligned right, stacked vertically
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  user.role,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.inkSoft,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.location_on_outlined,
+                      size: 12,
+                      color: AppColors.muted,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      user.location.split(',').first,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
