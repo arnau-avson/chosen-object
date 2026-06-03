@@ -1210,56 +1210,50 @@ class _ChatBubble extends StatelessWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // ── Bubble ──
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
+                // ── Cloud bubble ──
+                CustomPaint(
+                  painter: _CloudBubblePainter(
                     color: isMine ? AppColors.ink : AppColors.surface,
-                    borderRadius: isLastInGroup
-                        ? BorderRadius.only(
-                            topLeft: const Radius.circular(16),
-                            topRight: const Radius.circular(16),
-                            bottomLeft:
-                                Radius.circular(isMine ? 16 : 0),
-                            bottomRight:
-                                Radius.circular(isMine ? 0 : 16),
-                          )
-                        : BorderRadius.circular(16),
                   ),
-                  child: Column(
-                    crossAxisAlignment: isMine
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (message.replyToId != null) ...[
-                        _buildReplyQuote(),
-                        const SizedBox(height: 6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
+                    child: Column(
+                      crossAxisAlignment: isMine
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (message.replyToId != null) ...[
+                          _buildReplyQuote(),
+                          const SizedBox(height: 6),
+                        ],
+                        Text(
+                          message.text,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color:
+                                isMine ? AppColors.bone : AppColors.inkSoft,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTime(message.timestamp),
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400,
+                            color: isMine
+                                ? AppColors.bone.withValues(alpha: 0.5)
+                                : AppColors.muted,
+                          ),
+                        ),
                       ],
-                      Text(
-                        message.text,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          color: isMine ? AppColors.bone : AppColors.inkSoft,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatTime(message.timestamp),
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w400,
-                          color: isMine
-                              ? AppColors.bone.withValues(alpha: 0.5)
-                              : AppColors.muted,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
+
 
                 // ── Reaction pill ──
                 if (hasReaction)
@@ -1525,4 +1519,71 @@ class _ReactionBar extends StatelessWidget {
       ),
     );
   }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Cloud bubble painter ────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _CloudBubblePainter extends CustomPainter {
+  final Color color;
+
+  _CloudBubblePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(_cloudPath(size), paint);
+  }
+
+  Path _cloudPath(Size size) {
+    final path = Path();
+    final w = size.width;
+    final h = size.height;
+    const bump = 4.0;
+
+    final hBumps = (w / 22).round().clamp(3, 14);
+    final vBumps = (h / 22).round().clamp(2, 8);
+    final hSeg = w / hBumps;
+    final vSeg = h / vBumps;
+
+    path.moveTo(0, 0);
+
+    // Top edge — bumps upward
+    for (int i = 0; i < hBumps; i++) {
+      final x1 = hSeg * i;
+      final x2 = hSeg * (i + 1);
+      path.quadraticBezierTo((x1 + x2) / 2, -bump, x2, 0);
+    }
+
+    // Right edge — bumps rightward
+    for (int i = 0; i < vBumps; i++) {
+      final y1 = vSeg * i;
+      final y2 = vSeg * (i + 1);
+      path.quadraticBezierTo(w + bump, (y1 + y2) / 2, w, y2);
+    }
+
+    // Bottom edge — bumps downward (right to left)
+    for (int i = hBumps; i > 0; i--) {
+      final x1 = hSeg * i;
+      final x2 = hSeg * (i - 1);
+      path.quadraticBezierTo((x1 + x2) / 2, h + bump, x2, h);
+    }
+
+    // Left edge — bumps leftward (bottom to top)
+    for (int i = vBumps; i > 0; i--) {
+      final y1 = vSeg * i;
+      final y2 = vSeg * (i - 1);
+      path.quadraticBezierTo(-bump, (y1 + y2) / 2, 0, y2);
+    }
+
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldRepaint(covariant _CloudBubblePainter oldDelegate) =>
+      color != oldDelegate.color;
 }
