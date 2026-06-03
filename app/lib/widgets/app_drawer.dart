@@ -8,6 +8,7 @@ import '../screens/map/map_screen.dart';
 import '../screens/search/search_screen.dart';
 import '../screens/collection/collection_screen.dart';
 import '../screens/studios/studios_screen.dart';
+import '../screens/messages/messages_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -327,6 +328,8 @@ class _ItemWidget extends StatelessWidget {
         screen = const StudiosScreen();
       case '/collection':
         screen = const CollectionScreen();
+      case '/messages':
+        screen = const MessagesScreen();
     }
 
     if (screen != null) {

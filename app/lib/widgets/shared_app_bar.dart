@@ -7,8 +7,9 @@ class SharedAppBar extends StatefulWidget implements PreferredSizeWidget {
   final String? currentRoute;
   final bool hideSearchIcon;
   final bool showBack;
+  final String? title;
 
-  const SharedAppBar({super.key, this.currentRoute, this.hideSearchIcon = false, this.showBack = false});
+  const SharedAppBar({super.key, this.currentRoute, this.hideSearchIcon = false, this.showBack = false, this.title});
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -109,12 +110,18 @@ class _SharedAppBarState extends State<SharedAppBar>
               child: Stack(
                 alignment: Alignment.centerLeft,
                 children: [
-                  // Wordmark fades out
+                  // Wordmark or custom title fades out
                   IgnorePointer(
                     ignoring: _searchActive,
                     child: FadeTransition(
                       opacity: _titleFade,
-                      child: const Text('Chosen Object'),
+                      child: widget.title != null
+                          ? Text(
+                              widget.title!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : const Text('Chosen Object'),
                     ),
                   ),
                   // Search field slides+fades in

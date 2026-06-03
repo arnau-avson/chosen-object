@@ -79,7 +79,7 @@ Scheduled tasks are managed using Celery (or APScheduler). Ensure the task sched
 This project is licensed under the MIT License. See the LICENSE file for details.
 
 
-
+   
 
 ## Start
 ````bash
