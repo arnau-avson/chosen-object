@@ -77,3 +77,15 @@ Scheduled tasks are managed using Celery (or APScheduler). Ensure the task sched
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file for details.
+
+
+
+
+## Start
+````bash
+cd c:/Users/arnau/Desktop/chosen-object/backend
+python -m venv venv
+venv\Scripts\activate
+
+uvicorn main:app --reload
+````

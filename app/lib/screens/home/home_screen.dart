@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/loading_spinner.dart';
 import '../../widgets/shared_app_bar.dart';
 import '../product_detail/product_detail_screen.dart';
 
@@ -16,6 +17,24 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
+
+  static const _pageSize = 4;
+  int _displayedCount = _pageSize;
+  bool _loading = false;
+
+  bool get _hasMore => _displayedCount < mockProducts.length;
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    setState(() {
+      _displayedCount =
+          (_displayedCount + _pageSize).clamp(0, mockProducts.length);
+      _loading = false;
+    });
+  }
 
   @override
   void initState() {
@@ -69,10 +88,47 @@ class _HomeScreenState extends State<HomeScreen>
               opacity: _fade(0.2, 0.7),
               child: SlideTransition(
                 position: _slide(0.2, 0.7),
-                child: const _ProductGrid(),
+                child: _ProductGrid(
+                  products: mockProducts.take(_displayedCount).toList(),
+                ),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
+            // ── Load more / spinner ──
+            if (_hasMore)
+              Center(
+                child: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.only(bottom: 32),
+                        child: LoadingSpinner(),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.only(bottom: 32),
+                        child: GestureDetector(
+                          onTap: _loadMore,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 28, vertical: 11),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                  color: AppColors.hairline, width: 1),
+                            ),
+                            child: Text(
+                              'Load more',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.inkSoft,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+              )
+            else
+              const SizedBox(height: 32),
           ],
         ),
       ),
@@ -575,7 +631,8 @@ class _FiltersModalState extends State<_FiltersModal> {
 // ── Product grid ─────────────────────────────────────────────
 
 class _ProductGrid extends StatelessWidget {
-  const _ProductGrid();
+  final List<Product> products;
+  const _ProductGrid({required this.products});
 
   @override
   Widget build(BuildContext context) {
@@ -584,14 +641,14 @@ class _ProductGrid extends StatelessWidget {
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: mockProducts.length,
+        itemCount: products.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 14,
           mainAxisSpacing: 24,
           childAspectRatio: 0.58,
         ),
-        itemBuilder: (_, i) => _ProductCard(product: mockProducts[i]),
+        itemBuilder: (_, i) => _ProductCard(product: products[i]),
       ),
     );
   }
@@ -609,28 +666,31 @@ class _ProductCard extends StatefulWidget {
 
 class _ProductCardState extends State<_ProductCard> {
   int _currentPage = 0;
+  bool _saved = false;
+
+  void _openDetail() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) =>
+            ProductDetailScreen(productId: widget.product.id),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final images = widget.product.images;
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          PageRouteBuilder(
-            pageBuilder: (_, _, _) =>
-                ProductDetailScreen(productId: widget.product.id),
-            transitionsBuilder: (_, animation, _, child) =>
-                FadeTransition(opacity: animation, child: child),
-            transitionDuration: const Duration(milliseconds: 300),
-          ),
-        );
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Image area with PageView ──
-          Expanded(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Image area with PageView ──
+        Expanded(
+          child: GestureDetector(
+            onTap: _openDetail,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: Stack(
@@ -696,42 +756,77 @@ class _ProductCardState extends State<_ProductCard> {
               ),
             ),
           ),
+        ),
 
-          const SizedBox(height: 10),
+        const SizedBox(height: 10),
 
-          // ── Product info ──
-          Text(
-            widget.product.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: AppColors.inkStrong,
-            ),
+        // ── Product info + save icon ──
+        GestureDetector(
+          onTap: _openDetail,
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.product.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.inkStrong,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${widget.product.designer} · ${widget.product.year}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.product.price,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _saved = !_saved),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 4, top: 1),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, anim) =>
+                        ScaleTransition(scale: anim, child: child),
+                    child: Icon(
+                      _saved
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      key: ValueKey(_saved),
+                      size: 18,
+                      color: _saved ? AppColors.accent : AppColors.muted,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            '${widget.product.designer} · ${widget.product.year}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: AppColors.muted,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.product.price,
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              color: AppColors.inkSoft,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

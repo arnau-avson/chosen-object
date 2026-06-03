@@ -48,7 +48,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       drawer: const AppDrawer(currentRoute: '/product-detail'),
-      appBar: const SharedAppBar(currentRoute: '/product-detail'),
+      appBar: const SharedAppBar(currentRoute: '/product-detail', showBack: true),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
 import '../core/auth_service.dart';
 import 'home/home_screen.dart';
-import 'onboarding/onboarding_screen.dart';
+import 'auth/login_screen.dart';
 
 /// Pantalla inicial que comprueba el token y redirige al destino correcto.
 class SplashScreen extends StatefulWidget {
@@ -48,11 +48,11 @@ class _SplashScreenState extends State<SplashScreen>
     }
     if (!mounted) return;
 
-    // Authenticated → home. Not authenticated → always show onboarding first.
+    // Authenticated → home. Not authenticated → login.
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, _, _) =>
-            authenticated ? const HomeScreen() : const OnboardingScreen(),
+            authenticated ? const HomeScreen() : const LoginScreen(),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 400),

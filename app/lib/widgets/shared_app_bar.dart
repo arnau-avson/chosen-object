@@ -5,8 +5,9 @@ import '../core/app_colors.dart';
 class SharedAppBar extends StatefulWidget implements PreferredSizeWidget {
   final String? currentRoute;
   final bool hideSearchIcon;
+  final bool showBack;
 
-  const SharedAppBar({super.key, this.currentRoute, this.hideSearchIcon = false});
+  const SharedAppBar({super.key, this.currentRoute, this.hideSearchIcon = false, this.showBack = false});
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -89,6 +90,14 @@ class _SharedAppBarState extends State<SharedAppBar>
   @override
   Widget build(BuildContext context) {
     return AppBar(
+      leading: widget.showBack
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, size: 21),
+              color: AppColors.inkSoft,
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Back',
+            )
+          : null,
       titleSpacing: 0,
       title: Padding(
         padding: const EdgeInsets.only(right: 4),

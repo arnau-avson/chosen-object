@@ -270,6 +270,7 @@ class _MapScreenState extends State<MapScreen> {
                               alignment: Alignment.center,
                               padding: const EdgeInsets.all(50),
                               maxZoom: 15,
+                              showPolygon: false,
                               markers: markers,
                               builder: (context, clusterMarkers) {
                                 return Container(
