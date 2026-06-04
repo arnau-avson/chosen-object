@@ -6,7 +6,7 @@
 
 - **Backend API** – developed in Python
 - **Mobile client** – developed with Flutter
-- **Web client** – developed with React + Vite
+- **Web client** – developed with Vue.js + Vite + Tailwind CSS
 
 The project follows a monorepo-like structure where each component lives in its own root directory.
 
@@ -15,7 +15,7 @@ The project follows a monorepo-like structure where each component lives in its 
 ```
 chosen-object/
 ├── backend/ # Python backend (API, business logic, database)
-├── web/ # React + Vite + tailwind frontend (web application)
+├── web/ # Vue.js + Vite + Tailwind CSS frontend (web application)
 ├── app/ # Flutter mobile application (iOS & Android)
 └── docs/ # Documentation (optional)
 ```
@@ -25,7 +25,7 @@ chosen-object/
 | Directory   | Technology                     | Purpose                                           |
 |-------------|---------------------------------|---------------------------------------------------|
 | `/backend`  | Python (e.g., FastAPI, Flask)  | REST/GraphQL API, authentication, data persistence, business rules |
-| `/web`      | React + Vite                   | Single Page Application (SPA) for desktop and mobile browsers |
+| `/web`      | Vue.js + Vite + Tailwind       | Single Page Application (SPA) for desktop and mobile browsers |
 | `/app`      | Flutter                        | Native mobile app for iOS and Android            |
 
 ## 3. Backend (Python)
@@ -54,14 +54,15 @@ COPY . .
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-## 4. Web Client (React + Vite)
+## 4. Web Client (Vue.js + Vite)
 
 ### 4.1 Technology
 
-- React 18+ with functional components
+- Vue 3 with Composition API + TypeScript
 - Vite as build tool (fast HMR, optimized production builds)
-- State management: Context API / Redux / Zustand (as needed)
-- Routing: React Router
+- Tailwind CSS v4 for styling
+- State management: Pinia
+- Routing: Vue Router
 
 ### 4.2 Production serving
 

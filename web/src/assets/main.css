@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Inter:wght@100..900&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  /* ── Colors (from style-guide.md) ── */
+
+  /* Brand */
+  --color-ink: #2E2520;
+  --color-bone: #F2EBE0;
+  --color-surface: #FFFEFB;
+
+  /* Accent */
+  --color-accent: #B8543C;
+  --color-gold: #A8893E;
+  --color-sage: #6B7A5A;
+
+  /* Neutrals */
+  --color-ink-strong: #1F1810;
+  --color-ink-soft: #4A3F35;
+  --color-muted: #9A8C7B;
+  --color-muted-2: #C2B5A2;
+  --color-hairline: #E0D6C4;
+  --color-hairline-2: #EBE2D0;
+
+  /* Semantic */
+  --color-danger: #B5342E;
+  --color-success: #4A7A4D;
+
+  /* ── Typography ── */
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+
+  /* ── Border radii ── */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  /* ── Layout ── */
+  --topbar-h: 60px;
+  --sidebar-w: 240px;
+  --container: 1280px;
+
+  /* ── Transitions ── */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Base styles ── */
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--color-ink);
+  background-color: var(--color-bone);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
