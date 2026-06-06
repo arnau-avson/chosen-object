@@ -10,7 +10,12 @@ import '../screens/collection/collection_screen.dart';
 import '../screens/studios/studios_screen.dart';
 import '../screens/messages/messages_screen.dart';
 import '../screens/orders/orders_screen.dart';
+import '../screens/payments/payments_screen.dart';
+import '../screens/addresses/addresses_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
+import '../screens/profile/edit_profile_screen.dart';
+import '../screens/profile/profile_screen.dart';
+import '../screens/settings/settings_screen.dart';
 import '../models/app_notification.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -44,8 +49,6 @@ class _AppDrawerState extends State<AppDrawer>
     _Section('Account', [
       _Item('Profile',         Icons.person_outline_rounded,        '/profile'),
       _Item('Settings',        Icons.tune_rounded,                  '/settings'),
-      _Item('Edit profile',    Icons.edit_outlined,                 '/edit-profile'),
-      _Item('Followers',       Icons.people_outline_rounded,        '/followers'),
       _Item('Addresses',       Icons.location_on_outlined,          '/addresses'),
       _Item('Payments',        Icons.credit_card_outlined,          '/payments'),
       _Item('Help',            Icons.help_outline_rounded,          '/help'),
@@ -337,6 +340,16 @@ class _ItemWidget extends StatelessWidget {
         screen = const OrdersScreen();
       case '/notifications':
         screen = const NotificationsScreen();
+      case '/profile':
+        screen = const ProfileScreen();
+      case '/settings':
+        screen = const SettingsScreen();
+      case '/edit-profile':
+        screen = const EditProfileScreen();
+      case '/payments':
+        screen = const PaymentsScreen();
+      case '/addresses':
+        screen = const AddressesScreen();
     }
 
     if (screen != null) {

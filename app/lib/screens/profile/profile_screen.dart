@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../../core/follow_service.dart';
-import '../../models/product.dart';
-import '../../models/user_profile.dart';
 import '../../core/collection_service.dart';
+import '../../core/profile_service.dart';
+import '../../models/product.dart';
+import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/save_to_collection_modal.dart';
+import '../../widgets/shared_app_bar.dart';
 import '../product_detail/product_detail_screen.dart';
+import 'edit_profile_screen.dart';
 import 'followers_screen.dart';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -20,22 +22,19 @@ String _formatNumber(int n) {
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── User Profile Screen ─────────────────────────────────────
+// ── Profile Screen ──────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
-class UserProfileScreen extends StatefulWidget {
-  final String userId;
-  const UserProfileScreen({super.key, required this.userId});
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
 
   @override
-  State<UserProfileScreen> createState() => _UserProfileScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _UserProfileScreenState extends State<UserProfileScreen>
+class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final UserProfile profile;
-  late final List<Product> _userProducts;
+  late final AnimationController _anim;
 
   bool _descExpanded = false;
 
@@ -44,12 +43,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   int _displayedCount = _pageSize;
   bool _loading = false;
 
+  late final List<Product> _userProducts;
+
   bool get _hasMore => _displayedCount < _userProducts.length;
 
   // ── Animation helpers ──────────────────────────────────────
 
   Animation<double> _fade(double start, double end) => CurvedAnimation(
-        parent: _ctrl,
+        parent: _anim,
         curve: Interval(start.clamp(0, 1), end.clamp(0, 1),
             curve: Curves.easeOut),
       );
@@ -57,21 +58,42 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   Animation<Offset> _slide(double start, double end) =>
       Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(
         CurvedAnimation(
-          parent: _ctrl,
+          parent: _anim,
           curve: Interval(start.clamp(0, 1), end.clamp(0, 1),
               curve: Curves.easeOut),
         ),
       );
 
-  // ── Lifecycle ──────────────────────────────────────────────
+  void _openFollowers(int tab) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) =>
+            FollowersScreen(userId: 'me', initialTab: tab),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
+
+  void _openEditProfile() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => const EditProfileScreen(),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    profile = findProfileById(widget.userId);
-    _userProducts =
-        mockProducts.where((p) => p.designer == profile.name).toList();
-    _ctrl = AnimationController(
+    _userProducts = mockProducts
+        .where((p) => p.designer == ProfileService.instance.name)
+        .toList();
+    _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
@@ -79,20 +101,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _anim.dispose();
     super.dispose();
-  }
-
-  void _openFollowers(int tab) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, _, _) =>
-            FollowersScreen(userId: widget.userId, initialTab: tab),
-        transitionsBuilder: (_, animation, _, child) =>
-            FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 300),
-      ),
-    );
   }
 
   Future<void> _loadMore() async {
@@ -111,30 +121,22 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    final safeTop = MediaQuery.of(context).padding.top;
-    final initials = profile.name
-        .split(' ')
-        .where((w) => w.isNotEmpty)
-        .map((w) => w[0])
-        .take(2)
-        .join();
     final displayed = _userProducts.take(_displayedCount).toList();
 
     return Scaffold(
       backgroundColor: AppColors.bone,
+      appBar: const SharedAppBar(currentRoute: '/profile'),
+      drawer: const AppDrawer(currentRoute: '/profile'),
       body: ListenableBuilder(
-        listenable: FollowService.instance,
+        listenable: ProfileService.instance,
         builder: (context, _) {
-          final isFollowing = FollowService.instance.isFollowing(widget.userId);
+          final p = ProfileService.instance;
 
-          return Stack(
-        children: [
-          // ── Scrollable content ──
-          SingleChildScrollView(
+          return SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── A) Banner + Avatar overlap ──
+                // ── A) Banner + Avatar + Edit overlays ──
                 FadeTransition(
                   opacity: _fade(0.0, 0.40),
                   child: SlideTransition(
@@ -150,31 +152,86 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             left: 0,
                             right: 0,
                             height: 140,
-                            child:
-                                Container(color: profile.bannerColor),
+                            child: Container(color: p.bannerColor),
                           ),
+
+                          // Banner edit overlay
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: GestureDetector(
+                              onTap: _openEditProfile,
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface
+                                      .withValues(alpha: 0.78),
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.camera_alt_outlined,
+                                  size: 16,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                            ),
+                          ),
+
                           // Avatar
                           Positioned(
                             bottom: 0,
                             left: 24,
-                            child: Container(
-                              width: 88,
-                              height: 88,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: profile.avatarColor,
-                                border: Border.all(
-                                    color: AppColors.surface, width: 4),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                initials,
-                                style: GoogleFonts.fraunces(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w400,
-                                  color: Colors.white.withValues(alpha: 0.85),
+                            child: Stack(
+                              children: [
+                                Container(
+                                  width: 88,
+                                  height: 88,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: p.avatarColor,
+                                    border: Border.all(
+                                        color: AppColors.surface, width: 4),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    p.initials,
+                                    style: GoogleFonts.fraunces(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w400,
+                                      color: Colors.white
+                                          .withValues(alpha: 0.85),
+                                    ),
+                                  ),
                                 ),
-                              ),
+
+                                // Avatar edit overlay
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: GestureDetector(
+                                    onTap: _openEditProfile,
+                                    child: Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.ink,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: AppColors.surface,
+                                            width: 2),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.camera_alt_outlined,
+                                        size: 13,
+                                        color: AppColors.bone,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -185,7 +242,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
                 const SizedBox(height: 14),
 
-                // ── B) Name + description ──
+                // ── B) Name + handle + location ──
                 FadeTransition(
                   opacity: _fade(0.07, 0.47),
                   child: SlideTransition(
@@ -195,30 +252,37 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Name + verified
                           Row(
                             children: [
                               Text(
-                                profile.name,
+                                p.name,
                                 style: GoogleFonts.fraunces(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w400,
                                   color: AppColors.inkStrong,
                                 ),
                               ),
-                              if (profile.verified) ...[
+                              if (p.verified) ...[
                                 const SizedBox(width: 6),
                                 Icon(Icons.verified,
                                     size: 18, color: AppColors.sage),
                               ],
                             ],
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            p.handle,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.muted,
+                            ),
+                          ),
                           const SizedBox(height: 6),
-                          // Description line
                           Text(
                             [
-                              profile.location.split(',').first,
-                              ...profile.specialties,
+                              p.location.split(',').first,
+                              ...p.specialties,
                             ].join(' · '),
                             style: GoogleFonts.inter(
                               fontSize: 13,
@@ -234,73 +298,41 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
                 const SizedBox(height: 20),
 
-                // ── C) Action buttons ──
+                // ── C) Edit profile button ──
                 FadeTransition(
                   opacity: _fade(0.14, 0.54),
                   child: SlideTransition(
                     position: _slide(0.14, 0.54),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 48),
-                      child: Row(
-                        children: [
-                          // Follow
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => FollowService.instance
-                                  .toggleFollow(widget.userId),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 220),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 11),
-                                decoration: BoxDecoration(
-                                  color: isFollowing
-                                      ? Colors.transparent
-                                      : AppColors.ink,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: isFollowing
-                                        ? AppColors.hairline
-                                        : AppColors.ink,
-                                    width: 1,
-                                  ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  isFollowing ? 'Following' : 'Follow',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: isFollowing
-                                        ? AppColors.inkSoft
-                                        : AppColors.bone,
-                                  ),
-                                ),
-                              ),
-                            ),
+                      child: GestureDetector(
+                        onTap: _openEditProfile,
+                        child: Container(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 11),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                                color: AppColors.hairline, width: 1),
                           ),
-                          const SizedBox(width: 10),
-                          // Message
-                          Expanded(
-                            child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 11),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: AppColors.hairline, width: 1),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'Message',
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.edit_outlined,
+                                  size: 15, color: AppColors.inkSoft),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Edit profile',
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                   color: AppColors.inkSoft,
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -314,41 +346,41 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   child: SlideTransition(
                     position: _slide(0.21, 0.61),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 24),
                       child: IntrinsicHeight(
                         child: Row(
                           children: [
                             Expanded(
                               child: _StatColumn(
-                                count: profile.pieceCount,
+                                count: p.pieceCount,
                                 label: 'Pieces',
                               ),
                             ),
                             Container(
                               width: 1,
                               color: AppColors.hairline,
-                              margin:
-                                  const EdgeInsets.symmetric(vertical: 4),
+                              margin: const EdgeInsets.symmetric(
+                                  vertical: 4),
                             ),
                             Expanded(
                               child: _StatColumn(
-                                count: profile.soldCount,
+                                count: p.soldCount,
                                 label: 'Sold',
                               ),
                             ),
                             Container(
                               width: 1,
                               color: AppColors.hairline,
-                              margin:
-                                  const EdgeInsets.symmetric(vertical: 4),
+                              margin: const EdgeInsets.symmetric(
+                                  vertical: 4),
                             ),
                             Expanded(
                               child: GestureDetector(
                                 onTap: () => _openFollowers(0),
                                 behavior: HitTestBehavior.opaque,
                                 child: _StatColumn(
-                                  count: FollowService.instance
-                                      .followerCount(widget.userId),
+                                  count: p.followerCount,
                                   label: 'Followers',
                                 ),
                               ),
@@ -356,16 +388,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             Container(
                               width: 1,
                               color: AppColors.hairline,
-                              margin:
-                                  const EdgeInsets.symmetric(vertical: 4),
+                              margin: const EdgeInsets.symmetric(
+                                  vertical: 4),
                             ),
                             Expanded(
                               child: GestureDetector(
                                 onTap: () => _openFollowers(1),
                                 behavior: HitTestBehavior.opaque,
                                 child: _StatColumn(
-                                  count: FollowService.instance
-                                      .followingCount(widget.userId),
+                                  count: p.followingCount,
                                   label: 'Following',
                                 ),
                               ),
@@ -435,7 +466,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                     CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    profile.bio,
+                                    p.bio,
                                     maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.inter(
@@ -461,7 +492,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                     CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    profile.bio,
+                                    p.bio,
                                     style: GoogleFonts.inter(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w400,
@@ -491,8 +522,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 const SizedBox(height: 24),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24),
-                  child:
-                      Divider(color: AppColors.hairline, height: 1),
+                  child: Divider(color: AppColors.hairline, height: 1),
                 ),
 
                 // ── F) Nº02 — Pieces ──
@@ -504,8 +534,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
                           child: RichText(
                             text: TextSpan(
                               children: [
@@ -560,7 +589,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           _ProductGrid(products: displayed),
                           const SizedBox(height: 28),
 
-                          // Load more / spinner
                           if (_loading)
                             const Padding(
                               padding: EdgeInsets.only(bottom: 32),
@@ -569,15 +597,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           else if (_hasMore)
                             Center(
                               child: Padding(
-                                padding:
-                                    const EdgeInsets.only(bottom: 32),
+                                padding: const EdgeInsets.only(bottom: 32),
                                 child: GestureDetector(
                                   onTap: _loadMore,
                                   child: Container(
-                                    padding:
-                                        const EdgeInsets.symmetric(
-                                            horizontal: 22,
-                                            vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 22, vertical: 10),
                                     decoration: BoxDecoration(
                                       borderRadius:
                                           BorderRadius.circular(999),
@@ -606,32 +631,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 const SizedBox(height: 32),
               ],
             ),
-          ),
-
-          // ── G) Back button overlay ──
-          Positioned(
-            top: safeTop + 12,
-            left: 16,
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.surface.withValues(alpha: 0.78),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.arrow_back_rounded,
-                  size: 20,
-                  color: AppColors.inkSoft,
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
+          );
         },
       ),
     );
@@ -790,7 +790,8 @@ class _ProductCardState extends State<_ProductCard> {
                             duration: const Duration(milliseconds: 200),
                             width: active ? 6 : 5,
                             height: active ? 6 : 5,
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            margin:
+                                const EdgeInsets.symmetric(horizontal: 3),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: active
