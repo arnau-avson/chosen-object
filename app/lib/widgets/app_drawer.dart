@@ -9,6 +9,9 @@ import '../screens/search/search_screen.dart';
 import '../screens/collection/collection_screen.dart';
 import '../screens/studios/studios_screen.dart';
 import '../screens/messages/messages_screen.dart';
+import '../screens/orders/orders_screen.dart';
+import '../screens/notifications/notifications_screen.dart';
+import '../models/app_notification.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -25,7 +28,7 @@ class _AppDrawerState extends State<AppDrawer>
 
   // ── Secciones ──────────────────────────────────────────────
 
-  static const _sections = [
+  static final _sections = [
     _Section('Discover', [
       _Item('Home',            Icons.home_outlined,                 '/home'),
       _Item('Search',          Icons.search_outlined,               '/search'),
@@ -36,7 +39,7 @@ class _AppDrawerState extends State<AppDrawer>
       _Item('Collection',      Icons.bookmark_border_rounded,       '/collection',    badge: 0),
       _Item('Messages',        Icons.chat_bubble_outline_rounded,   '/messages',      badge: 2),
       _Item('Orders',          Icons.receipt_long_outlined,         '/orders'),
-      _Item('Notifications',   Icons.notifications_none_rounded,    '/notifications'),
+      _Item('Notifications',   Icons.notifications_none_rounded,    '/notifications', badge: mockNotifications.where((n) => !n.isRead).length),
     ]),
     _Section('Account', [
       _Item('Profile',         Icons.person_outline_rounded,        '/profile'),
@@ -330,6 +333,10 @@ class _ItemWidget extends StatelessWidget {
         screen = const CollectionScreen();
       case '/messages':
         screen = const MessagesScreen();
+      case '/orders':
+        screen = const OrdersScreen();
+      case '/notifications':
+        screen = const NotificationsScreen();
     }
 
     if (screen != null) {
