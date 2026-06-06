@@ -109,6 +109,100 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
+  void _pickAccountRole() {
+    final s = SettingsService.instance;
+    const roles = ['Buyer', 'Seller', 'Both'];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.hairline,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Account type',
+              style: GoogleFonts.fraunces(
+                fontSize: 18,
+                fontWeight: FontWeight.w400,
+                color: AppColors.inkStrong,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...roles.map((role) {
+              final selected = role == s.accountRole;
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  splashColor: AppColors.ink.withValues(alpha: 0.05),
+                  onTap: () {
+                    s.setAccountRole(role);
+                    Navigator.of(context).pop();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 13, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                role,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: selected
+                                      ? FontWeight.w500
+                                      : FontWeight.w400,
+                                  color: selected
+                                      ? AppColors.inkStrong
+                                      : AppColors.inkSoft,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                role == 'Buyer'
+                                    ? 'Browse, collect and purchase pieces'
+                                    : role == 'Seller'
+                                        ? 'List and sell your own pieces'
+                                        : 'Buy and sell on the platform',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (selected)
+                          const Icon(Icons.check_rounded,
+                              size: 16, color: AppColors.accent),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────
 
   @override
@@ -158,6 +252,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                         _NavigationRow(
                           label: 'Edit profile',
                           onTap: _openEditProfile,
+                        ),
+                        const Divider(
+                            color: AppColors.hairline,
+                            height: 1,
+                            thickness: 1),
+                        _TapRow(
+                          label: 'Account type',
+                          value: s.accountRole,
+                          onTap: _pickAccountRole,
                         ),
                         const Divider(
                             color: AppColors.hairline,
@@ -456,6 +559,62 @@ class _ToggleRow extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════
 // ── Info row ────────────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
+
+// ═════════════════════════════════════════════════════════════
+// ── Tap row (label + value + chevron) ───────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _TapRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  const _TapRow({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: AppColors.ink.withValues(alpha: 0.05),
+        highlightColor: AppColors.ink.withValues(alpha: 0.04),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.inkSoft,
+                  ),
+                ),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.muted,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 20, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _InfoRow extends StatelessWidget {
   final String label;

@@ -9,6 +9,17 @@ class SettingsService extends ChangeNotifier {
   static SettingsService get instance => _instance;
   SettingsService._();
 
+  // ── Account role ─────────────────────────────────────────
+
+  String _accountRole = 'Both'; // 'Buyer', 'Seller', 'Both'
+
+  String get accountRole => _accountRole;
+
+  void setAccountRole(String v) {
+    _accountRole = v;
+    notifyListeners();
+  }
+
   // ── Notifications ─────────────────────────────────────────
 
   bool _pushNotifications = true;
