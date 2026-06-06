@@ -1,10 +1,16 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../core/app_colors.dart';
 import '../../core/profile_service.dart';
 import '../../widgets/shared_app_bar.dart';
 
-// ── Palette for avatar / banner colour picker ────────────────
+// ── Palette for colour picker ──────────────────────────────────
 
 const _palette = <Color>[
   Color(0xFF2E2520),
@@ -50,14 +56,23 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
+  final _picker = ImagePicker();
 
   // Personal
   late final TextEditingController _nameCtrl;
   late final TextEditingController _handleCtrl;
   late final TextEditingController _locationCtrl;
   late final TextEditingController _bioCtrl;
+
+  // Avatar state
+  late String _avatarType;
   late Color _avatarColor;
+  Uint8List? _avatarImageBytes;
+
+  // Banner state
+  late String _bannerType;
   late Color _bannerColor;
+  Uint8List? _bannerImageBytes;
 
   // Studio
   late final TextEditingController _studioNameCtrl;
@@ -101,8 +116,14 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     _handleCtrl = TextEditingController(text: p.handle);
     _locationCtrl = TextEditingController(text: p.location);
     _bioCtrl = TextEditingController(text: p.bio);
+
+    _avatarType = p.avatarType;
     _avatarColor = p.avatarColor;
+    _avatarImageBytes = p.avatarImageBytes;
+
+    _bannerType = p.bannerType;
     _bannerColor = p.bannerColor;
+    _bannerImageBytes = p.bannerImageBytes;
 
     _studioNameCtrl = TextEditingController(text: p.studioName);
     _discipline = p.discipline;
@@ -168,9 +189,225 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       vatId: _vatCtrl.text.trim(),
       iban: _ibanCtrl.text.trim(),
     );
-    p.updateAvatarColor(_avatarColor);
-    p.updateBannerColor(_bannerColor);
+
+    // Avatar
+    if (_avatarType == 'image' && _avatarImageBytes != null) {
+      p.updateAvatarImage(_avatarImageBytes!);
+    } else {
+      p.updateAvatarColor(_avatarColor);
+    }
+
+    // Banner
+    if (_bannerType == 'image' && _bannerImageBytes != null) {
+      p.updateBannerImage(_bannerImageBytes!);
+    } else {
+      p.updateBannerColor(_bannerColor);
+    }
+
+    // Push to backend (fire-and-forget)
+    p.saveToBackend();
+    p.uploadAvatarToBackend();
+    p.uploadBannerToBackend();
+
     Navigator.of(context).pop();
+  }
+
+  // ── Image picker + cropper ─────────────────────────────────
+
+  Future<Uint8List?> _pickAndCrop({
+    required double ratioX,
+    required double ratioY,
+  }) async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+    );
+    if (picked == null) return null;
+
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: picked.path,
+      aspectRatio: CropAspectRatio(ratioX: ratioX, ratioY: ratioY),
+      compressQuality: 80,
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: ratioX == ratioY ? 'Crop avatar' : 'Crop banner',
+          toolbarColor: const Color(0xFF2E2520),
+          toolbarWidgetColor: Colors.white,
+          activeControlsWidgetColor: AppColors.accent,
+          lockAspectRatio: true,
+        ),
+        IOSUiSettings(
+          title: ratioX == ratioY ? 'Crop avatar' : 'Crop banner',
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+        ),
+      ],
+    );
+    if (cropped == null) return null;
+    return File(cropped.path).readAsBytes();
+  }
+
+  // ── Colour-or-image chooser bottom sheet ───────────────────
+
+  void _showAvatarOptions() {
+    _showImageOrColorSheet(
+      title: 'Avatar',
+      currentColor: _avatarColor,
+      ratioX: 1,
+      ratioY: 1,
+      onColor: (c) => setState(() {
+        _avatarType = 'color';
+        _avatarColor = c;
+        _avatarImageBytes = null;
+      }),
+      onImage: (bytes) => setState(() {
+        _avatarType = 'image';
+        _avatarImageBytes = bytes;
+      }),
+    );
+  }
+
+  void _showBannerOptions() {
+    _showImageOrColorSheet(
+      title: 'Banner',
+      currentColor: _bannerColor,
+      ratioX: 3,
+      ratioY: 1,
+      onColor: (c) => setState(() {
+        _bannerType = 'color';
+        _bannerColor = c;
+        _bannerImageBytes = null;
+      }),
+      onImage: (bytes) => setState(() {
+        _bannerType = 'image';
+        _bannerImageBytes = bytes;
+      }),
+    );
+  }
+
+  void _showImageOrColorSheet({
+    required String title,
+    required Color currentColor,
+    required double ratioX,
+    required double ratioY,
+    required ValueChanged<Color> onColor,
+    required ValueChanged<Uint8List> onImage,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.hairline,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: GoogleFonts.fraunces(
+                fontSize: 18,
+                fontWeight: FontWeight.w400,
+                color: AppColors.inkStrong,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Option 1: Choose from gallery
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                splashColor: AppColors.ink.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickAndCrop(ratioX: ratioX, ratioY: ratioY).then((bytes) {
+                    if (bytes != null) onImage(bytes);
+                  });
+                },
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.photo_library_outlined,
+                          size: 20, color: AppColors.inkSoft),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          'Choose from gallery',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          size: 18, color: AppColors.muted),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const Divider(
+                color: AppColors.hairline, height: 1, thickness: 1),
+
+            // Option 2: Choose colour
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                splashColor: AppColors.ink.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickColor(
+                    title: '$title colour',
+                    current: currentColor,
+                    onPick: onColor,
+                  );
+                },
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.palette_outlined,
+                          size: 20, color: AppColors.inkSoft),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          'Choose colour',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          size: 18, color: AppColors.muted),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Colour picker bottom sheet ─────────────────────────────
@@ -192,7 +429,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
               width: 36,
               height: 4,
@@ -230,8 +466,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                       shape: BoxShape.circle,
                       border: selected
                           ? Border.all(color: AppColors.accent, width: 3)
-                          : Border.all(
-                              color: AppColors.hairline, width: 1),
+                          : Border.all(color: AppColors.hairline, width: 1),
                     ),
                     child: selected
                         ? const Icon(Icons.check_rounded,
@@ -300,9 +535,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                             d,
                             style: GoogleFonts.inter(
                               fontSize: 14,
-                              fontWeight: selected
-                                  ? FontWeight.w500
-                                  : FontWeight.w400,
+                              fontWeight:
+                                  selected ? FontWeight.w500 : FontWeight.w400,
                               color: selected
                                   ? AppColors.inkStrong
                                   : AppColors.inkSoft,
@@ -324,7 +558,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
   }
 
-  // ── Section header (editorial style) ───────────────────────
+  // ── Section header ─────────────────────────────────────────
 
   Widget _sectionLabel(String text) {
     return Padding(
@@ -392,9 +626,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
             ),
 
-            // ════════════════════════════════════════════════════
             // ── STUDIO INFO ──
-            // ════════════════════════════════════════════════════
             FadeTransition(
               opacity: _fade(0.08, 0.52),
               child: SlideTransition(
@@ -434,9 +666,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
             ),
 
-            // ════════════════════════════════════════════════════
             // ── ONLINE PRESENCE ──
-            // ════════════════════════════════════════════════════
             FadeTransition(
               opacity: _fade(0.12, 0.56),
               child: SlideTransition(
@@ -467,9 +697,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
             ),
 
-            // ════════════════════════════════════════════════════
             // ── INVOICING ──
-            // ════════════════════════════════════════════════════
             FadeTransition(
               opacity: _fade(0.16, 0.60),
               child: SlideTransition(
@@ -506,9 +734,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
             ),
 
-            // ════════════════════════════════════════════════════
             // ── COMMISSION INFO ──
-            // ════════════════════════════════════════════════════
             FadeTransition(
               opacity: _fade(0.20, 0.64),
               child: SlideTransition(
@@ -525,8 +751,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                         decoration: BoxDecoration(
                           color: AppColors.surface,
                           borderRadius: BorderRadius.circular(6),
-                          border:
-                              Border.all(color: AppColors.hairline, width: 1),
+                          border: Border.all(
+                              color: AppColors.hairline, width: 1),
                         ),
                         child: Text(
                           'Chosen Object fee: 18% of sale price + Stripe '
@@ -588,7 +814,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
   }
 
-  // ── Cover section (banner + avatar + change cover) ─────────
+  // ── Cover section (banner + avatar) ────────────────────────
 
   Widget _buildCoverSection(String initials) {
     return Column(
@@ -606,31 +832,35 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 right: 16,
                 height: 140,
                 child: GestureDetector(
-                  onTap: () => _pickColor(
-                    title: 'Banner colour',
-                    current: _bannerColor,
-                    onPick: (c) => setState(() => _bannerColor = c),
-                  ),
+                  onTap: _showBannerOptions,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      color: _bannerColor,
-                      alignment: Alignment.center,
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppColors.surface.withValues(alpha: 0.55),
-                          shape: BoxShape.circle,
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.camera_alt_outlined,
-                          size: 20,
-                          color: AppColors.inkSoft,
-                        ),
-                      ),
-                    ),
+                    child: _bannerType == 'image' && _bannerImageBytes != null
+                        ? Image.memory(
+                            _bannerImageBytes!,
+                            width: double.infinity,
+                            height: 140,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            color: _bannerColor,
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.surface.withValues(alpha: 0.55),
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.camera_alt_outlined,
+                                size: 20,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -640,11 +870,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 bottom: 0,
                 left: 36,
                 child: GestureDetector(
-                  onTap: () => _pickColor(
-                    title: 'Avatar colour',
-                    current: _avatarColor,
-                    onPick: (c) => setState(() => _avatarColor = c),
-                  ),
+                  onTap: _showAvatarOptions,
                   child: Stack(
                     children: [
                       Container(
@@ -652,19 +878,31 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                         height: 88,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: _avatarColor,
-                          border: Border.all(
-                              color: AppColors.surface, width: 4),
+                          color: _avatarType == 'image'
+                              ? Colors.transparent
+                              : _avatarColor,
+                          border:
+                              Border.all(color: AppColors.surface, width: 4),
                         ),
+                        clipBehavior: Clip.antiAlias,
                         alignment: Alignment.center,
-                        child: Text(
-                          initials,
-                          style: GoogleFonts.fraunces(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.white.withValues(alpha: 0.85),
-                          ),
-                        ),
+                        child: _avatarType == 'image' &&
+                                _avatarImageBytes != null
+                            ? Image.memory(
+                                _avatarImageBytes!,
+                                width: 88,
+                                height: 88,
+                                fit: BoxFit.cover,
+                              )
+                            : Text(
+                                initials,
+                                style: GoogleFonts.fraunces(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w400,
+                                  color:
+                                      Colors.white.withValues(alpha: 0.85),
+                                ),
+                              ),
                       ),
                       Positioned(
                         bottom: 0,
@@ -694,17 +932,13 @@ class _EditProfileScreenState extends State<EditProfileScreen>
           ),
         ),
 
-        // "Change cover" tap label
+        // "Change cover" label
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
           child: Align(
             alignment: Alignment.centerRight,
             child: GestureDetector(
-              onTap: () => _pickColor(
-                title: 'Banner colour',
-                current: _bannerColor,
-                onPick: (c) => setState(() => _bannerColor = c),
-              ),
+              onTap: _showBannerOptions,
               child: Text(
                 'Change cover',
                 style: GoogleFonts.inter(

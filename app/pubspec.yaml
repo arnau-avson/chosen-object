@@ -17,6 +17,8 @@ dependencies:
   latlong2: ^0.9.1
   flutter_map_marker_cluster: ^8.2.2
   geolocator: ^14.0.2
+  image_picker: ^1.1.2
+  image_cropper: ^9.0.0
 
 dev_dependencies:
   flutter_test:

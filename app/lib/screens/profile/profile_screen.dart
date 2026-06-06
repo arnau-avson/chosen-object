@@ -152,7 +152,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                             left: 0,
                             right: 0,
                             height: 140,
-                            child: Container(color: p.bannerColor),
+                            child: p.bannerType == 'image' &&
+                                    p.bannerImageBytes != null
+                                ? Image.memory(
+                                    p.bannerImageBytes!,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: 140,
+                                  )
+                                : Container(color: p.bannerColor),
                           ),
 
                           // Banner edit overlay
@@ -185,26 +193,44 @@ class _ProfileScreenState extends State<ProfileScreen>
                             left: 24,
                             child: Stack(
                               children: [
-                                Container(
-                                  width: 88,
-                                  height: 88,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: p.avatarColor,
-                                    border: Border.all(
-                                        color: AppColors.surface, width: 4),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    p.initials,
-                                    style: GoogleFonts.fraunces(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w400,
-                                      color: Colors.white
-                                          .withValues(alpha: 0.85),
-                                    ),
-                                  ),
-                                ),
+                                p.avatarType == 'image' &&
+                                        p.avatarImageBytes != null
+                                    ? Container(
+                                        width: 88,
+                                        height: 88,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                              color: AppColors.surface,
+                                              width: 4),
+                                          image: DecorationImage(
+                                            image: MemoryImage(
+                                                p.avatarImageBytes!),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 88,
+                                        height: 88,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: p.avatarColor,
+                                          border: Border.all(
+                                              color: AppColors.surface,
+                                              width: 4),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          p.initials,
+                                          style: GoogleFonts.fraunces(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.w400,
+                                            color: Colors.white
+                                                .withValues(alpha: 0.85),
+                                          ),
+                                        ),
+                                      ),
 
                                 // Avatar edit overlay
                                 Positioned(
