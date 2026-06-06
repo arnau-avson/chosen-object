@@ -18,18 +18,15 @@ class ProfileService extends ChangeNotifier {
 
   // ── Profile fields ────────────────────────────────────────
 
-  String _name = 'Borja Arrero';
-  String _handle = '@baarrero';
-  String _location = 'Barcelona, ES';
-  String _role = 'Collector & Designer';
-  String _bio =
-      'Design enthusiast and collector based in Barcelona. '
-      'Passionate about Mediterranean craft, honest materials, '
-      'and objects made to last. Always looking for the next '
-      'conversation piece.';
-  List<String> _specialties = ['Furniture', 'Ceramic'];
-  final int _pieceCount = 7;
-  final int _soldCount = 3;
+  String _username = '';
+  String _name = '';
+  String _handle = '';
+  String _location = '';
+  String _role = '';
+  String _bio = '';
+  List<String> _specialties = [];
+  int _pieceCount = 0;
+  int _soldCount = 0;
   final bool _verified = false;
 
   // ── Avatar / Banner ───────────────────────────────────────
@@ -44,26 +41,27 @@ class ProfileService extends ChangeNotifier {
 
   // ── Studio fields ─────────────────────────────────────────
 
-  String _studioName = 'Atelier Noire';
-  String _discipline = 'Lighting';
-  String _city = 'Paris';
-  String _country = 'France';
+  String _studioName = '';
+  String _discipline = '';
+  String _city = '';
+  String _country = '';
 
   // ── Online presence ───────────────────────────────────────
 
-  String _website = 'https://ateliernoire.fr';
-  String _instagram = '@atelier.noire';
-  String _portfolio = 'https://portfolio.com';
+  String _website = '';
+  String _instagram = '';
+  String _portfolio = '';
 
   // ── Invoicing ─────────────────────────────────────────────
 
-  String _legalEntity = 'Atelier Noire SARL';
-  String _vatId = 'FR 12 345 678 901';
-  String _iban = 'FR76 1234 5678 9012 3456 7890 123';
-  String _invoicePrefix = 'CO-ATELIERNOIRE-';
+  String _legalEntity = '';
+  String _vatId = '';
+  String _iban = '';
+  String _invoicePrefix = '';
 
   // ── Getters ───────────────────────────────────────────────
 
+  String get username => _username;
   String get name => _name;
   String get handle => _handle;
   String get location => _location;
@@ -108,6 +106,7 @@ class ProfileService extends ChangeNotifier {
   // ── Local setters (offline / mock) ────────────────────────
 
   void updateProfile({
+    String? username,
     String? name,
     String? handle,
     String? location,
@@ -125,6 +124,7 @@ class ProfileService extends ChangeNotifier {
     String? vatId,
     String? iban,
   }) {
+    if (username != null) _username = username;
     if (name != null) _name = name;
     if (handle != null) _handle = handle;
     if (location != null) _location = location;
@@ -187,25 +187,28 @@ class ProfileService extends ChangeNotifier {
   Future<void> loadFromBackend() async {
     try {
       final data = await ApiClient.instance.get('/profile/me');
+      _username = data['username'] ?? '';
       _name =
           '${data['first_name'] ?? ''} ${data['last_name'] ?? ''}'.trim();
-      _handle = data['handle'] ?? _handle;
-      _city = data['city'] ?? _city;
-      _country = data['country'] ?? _country;
+      _handle = data['handle'] ?? '';
+      _pieceCount = data['piece_count'] ?? 0;
+      _soldCount = data['sold_count'] ?? 0;
+      _city = data['city'] ?? '';
+      _country = data['country'] ?? '';
       _location = [_city, _country]
           .where((s) => s.isNotEmpty)
           .join(', ');
-      _role = data['role'] ?? _role;
-      _bio = data['bio'] ?? _bio;
-      _studioName = data['studio_name'] ?? _studioName;
-      _discipline = data['discipline'] ?? _discipline;
-      _website = data['website'] ?? _website;
-      _instagram = data['instagram'] ?? _instagram;
-      _portfolio = data['portfolio'] ?? _portfolio;
-      _legalEntity = data['legal_entity'] ?? _legalEntity;
-      _vatId = data['vat_id'] ?? _vatId;
-      _iban = data['iban'] ?? _iban;
-      _invoicePrefix = data['invoice_prefix'] ?? _invoicePrefix;
+      _role = data['role'] ?? '';
+      _bio = data['bio'] ?? '';
+      _studioName = data['studio_name'] ?? '';
+      _discipline = data['discipline'] ?? '';
+      _website = data['website'] ?? '';
+      _instagram = data['instagram'] ?? '';
+      _portfolio = data['portfolio'] ?? '';
+      _legalEntity = data['legal_entity'] ?? '';
+      _vatId = data['vat_id'] ?? '';
+      _iban = data['iban'] ?? '';
+      _invoicePrefix = data['invoice_prefix'] ?? '';
 
       // Avatar
       _avatarType = data['avatar_type'] ?? 'color';
@@ -239,6 +242,7 @@ class ProfileService extends ChangeNotifier {
 
     try {
       await ApiClient.instance.put('/profile/me', {
+        'username': _username,
         'first_name': firstName,
         'last_name': lastName,
         'handle': _handle,
@@ -257,6 +261,19 @@ class ProfileService extends ChangeNotifier {
       });
     } catch (_) {
       // Offline — changes saved locally only
+    }
+  }
+
+  /// Check if a username is available on the backend.
+  /// Returns null if available, or an error message if not.
+  Future<String?> checkUsername(String username) async {
+    try {
+      final data = await ApiClient.instance
+          .get('/profile/check-username/$username');
+      if (data['available'] == true) return null;
+      return data['reason'] as String? ?? 'Username not available.';
+    } catch (_) {
+      return null; // Offline — skip remote check
     }
   }
 

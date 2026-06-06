@@ -90,6 +90,7 @@ class ProfileOut(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
+    username: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     city: str | None = None

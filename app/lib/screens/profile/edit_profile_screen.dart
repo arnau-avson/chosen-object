@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -59,10 +60,15 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   final _picker = ImagePicker();
 
   // Personal
+  late final TextEditingController _usernameCtrl;
   late final TextEditingController _nameCtrl;
   late final TextEditingController _handleCtrl;
   late final TextEditingController _locationCtrl;
-  late final TextEditingController _bioCtrl;
+
+  // Username validation
+  Timer? _usernameDebounce;
+  String? _usernameError;   // null = valid or not checked yet
+  bool _usernameChecking = false;
 
   // Avatar state
   late String _avatarType;
@@ -112,10 +118,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   void initState() {
     super.initState();
     final p = ProfileService.instance;
+    _usernameCtrl = TextEditingController(text: p.username);
     _nameCtrl = TextEditingController(text: p.name);
     _handleCtrl = TextEditingController(text: p.handle);
     _locationCtrl = TextEditingController(text: p.location);
-    _bioCtrl = TextEditingController(text: p.bio);
 
     _avatarType = p.avatarType;
     _avatarColor = p.avatarColor;
@@ -127,11 +133,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
     _studioNameCtrl = TextEditingController(text: p.studioName);
     _discipline = p.discipline;
-    _studioBioCtrl = TextEditingController(
-      text:
-          'Brass, alabaster, blown glass. A lighting studio in the Marais '
-          'working with European foundries on small editions.',
-    );
+    _studioBioCtrl = TextEditingController(text: p.bio);
     _cityCtrl = TextEditingController(text: p.city);
     _countryCtrl = TextEditingController(text: p.country);
 
@@ -151,10 +153,11 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   @override
   void dispose() {
+    _usernameDebounce?.cancel();
+    _usernameCtrl.dispose();
     _nameCtrl.dispose();
     _handleCtrl.dispose();
     _locationCtrl.dispose();
-    _bioCtrl.dispose();
     _studioNameCtrl.dispose();
     _studioBioCtrl.dispose();
     _cityCtrl.dispose();
@@ -169,15 +172,84 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     super.dispose();
   }
 
+  // ── Username validation ──────────────────────────────────────
+
+  void _onUsernameChanged(String value) {
+    _usernameDebounce?.cancel();
+    final trimmed = value.trim().toLowerCase();
+
+    if (trimmed.length < 6) {
+      setState(() {
+        _usernameError = 'Must be at least 6 characters';
+        _usernameChecking = false;
+      });
+      return;
+    }
+
+    // Same as current → no need to check
+    if (trimmed == ProfileService.instance.username) {
+      setState(() {
+        _usernameError = null;
+        _usernameChecking = false;
+      });
+      return;
+    }
+
+    setState(() => _usernameChecking = true);
+
+    _usernameDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final error = await ProfileService.instance.checkUsername(trimmed);
+      if (!mounted) return;
+      setState(() {
+        _usernameError = error;
+        _usernameChecking = false;
+      });
+    });
+  }
+
   // ── Save ───────────────────────────────────────────────────
 
   void _save() {
+    // Block save if username is invalid
+    final uname = _usernameCtrl.text.trim().toLowerCase();
+    if (uname.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Username must be at least 6 characters.',
+            style: GoogleFonts.inter(fontSize: 13.5, color: AppColors.bone),
+          ),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        ),
+      );
+      return;
+    }
+    if (_usernameError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _usernameError!,
+            style: GoogleFonts.inter(fontSize: 13.5, color: AppColors.bone),
+          ),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        ),
+      );
+      return;
+    }
+
     final p = ProfileService.instance;
     p.updateProfile(
+      username: uname,
       name: _nameCtrl.text.trim(),
       handle: _handleCtrl.text.trim(),
       location: _locationCtrl.text.trim(),
-      bio: _bioCtrl.text.trim(),
+      bio: _studioBioCtrl.text.trim(),
       studioName: _studioNameCtrl.text.trim(),
       discipline: _discipline,
       city: _cityCtrl.text.trim(),
@@ -488,71 +560,90 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.hairline,
-                borderRadius: BorderRadius.circular(2),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.7,
+        expand: false,
+        builder: (_, scrollCtrl) => Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.hairline,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Discipline',
+                      style: GoogleFonts.fraunces(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.inkStrong,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Discipline',
-              style: GoogleFonts.fraunces(
-                fontSize: 18,
-                fontWeight: FontWeight.w400,
-                color: AppColors.inkStrong,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ..._disciplines.map((d) {
-              final selected = d == _discipline;
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  splashColor: AppColors.ink.withValues(alpha: 0.05),
-                  onTap: () {
-                    setState(() => _discipline = d);
-                    Navigator.of(context).pop();
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 13, horizontal: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            d,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight:
-                                  selected ? FontWeight.w500 : FontWeight.w400,
-                              color: selected
-                                  ? AppColors.inkStrong
-                                  : AppColors.inkSoft,
-                            ),
+              Expanded(
+                child: ListView(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                  children: _disciplines.map((d) {
+                    final selected = d == _discipline;
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        splashColor: AppColors.ink.withValues(alpha: 0.05),
+                        onTap: () {
+                          setState(() => _discipline = d);
+                          Navigator.of(context).pop();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 13, horizontal: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  d,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: selected
+                                        ? FontWeight.w500
+                                        : FontWeight.w400,
+                                    color: selected
+                                        ? AppColors.inkStrong
+                                        : AppColors.inkSoft,
+                                  ),
+                                ),
+                              ),
+                              if (selected)
+                                const Icon(Icons.check_rounded,
+                                    size: 16, color: AppColors.accent),
+                            ],
                           ),
                         ),
-                        if (selected)
-                          const Icon(Icons.check_rounded,
-                              size: 16, color: AppColors.accent),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -626,11 +717,34 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
             ),
 
+            // ── ACCOUNT ──
+            FadeTransition(
+              opacity: _fade(0.06, 0.50),
+              child: SlideTransition(
+                position: _slide(0.06, 0.50),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('Account'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _UsernameField(
+                        controller: _usernameCtrl,
+                        error: _usernameError,
+                        checking: _usernameChecking,
+                        onChanged: _onUsernameChanged,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             // ── STUDIO INFO ──
             FadeTransition(
-              opacity: _fade(0.08, 0.52),
+              opacity: _fade(0.10, 0.54),
               child: SlideTransition(
-                position: _slide(0.08, 0.52),
+                position: _slide(0.10, 0.54),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -668,9 +782,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
             // ── ONLINE PRESENCE ──
             FadeTransition(
-              opacity: _fade(0.12, 0.56),
+              opacity: _fade(0.14, 0.58),
               child: SlideTransition(
-                position: _slide(0.12, 0.56),
+                position: _slide(0.14, 0.58),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -699,9 +813,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
             // ── INVOICING ──
             FadeTransition(
-              opacity: _fade(0.16, 0.60),
+              opacity: _fade(0.18, 0.62),
               child: SlideTransition(
-                position: _slide(0.16, 0.60),
+                position: _slide(0.18, 0.62),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -720,7 +834,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                               controller: _vatCtrl,
                               optional: true),
                           const SizedBox(height: 16),
-                          _Field(label: 'IBAN', controller: _ibanCtrl),
+                          _Field(
+                              label: 'IBAN',
+                              controller: _ibanCtrl,
+                              optional: true),
                           const SizedBox(height: 16),
                           _ReadOnlyField(
                             label: 'Invoice prefix',
@@ -736,9 +853,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
             // ── COMMISSION INFO ──
             FadeTransition(
-              opacity: _fade(0.20, 0.64),
+              opacity: _fade(0.22, 0.66),
               child: SlideTransition(
-                position: _slide(0.20, 0.64),
+                position: _slide(0.22, 0.66),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -776,9 +893,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
             // ── Save button ──
             FadeTransition(
-              opacity: _fade(0.24, 0.68),
+              opacity: _fade(0.26, 0.70),
               child: SlideTransition(
-                position: _slide(0.24, 0.68),
+                position: _slide(0.26, 0.70),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: SizedBox(
@@ -1147,6 +1264,112 @@ class _ReadOnlyField extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Username field with live validation ──────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _UsernameField extends StatelessWidget {
+  final TextEditingController controller;
+  final String? error;
+  final bool checking;
+  final ValueChanged<String> onChanged;
+
+  const _UsernameField({
+    required this.controller,
+    required this.error,
+    required this.checking,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasText = controller.text.trim().isNotEmpty;
+    final isValid = hasText && error == null && !checking;
+    final isError = hasText && error != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Username',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: AppColors.muted,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isError
+                  ? AppColors.danger.withValues(alpha: 0.5)
+                  : isValid
+                      ? AppColors.success.withValues(alpha: 0.5)
+                      : AppColors.hairline,
+              width: 1,
+            ),
+          ),
+          child: TextField(
+            controller: controller,
+            onChanged: onChanged,
+            autocorrect: false,
+            enableSuggestions: false,
+            textCapitalization: TextCapitalization.none,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: AppColors.inkStrong,
+            ),
+            cursorColor: AppColors.ink,
+            decoration: InputDecoration(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: InputBorder.none,
+              suffixIcon: !hasText
+                  ? null
+                  : checking
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          isValid
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.cancel_outlined,
+                          size: 18,
+                          color: isValid ? AppColors.success : AppColors.danger,
+                        ),
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 42, minHeight: 0),
+            ),
+          ),
+        ),
+        if (isError) ...[
+          const SizedBox(height: 6),
+          Text(
+            error!,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+              color: AppColors.danger,
+            ),
+          ),
+        ],
       ],
     );
   }

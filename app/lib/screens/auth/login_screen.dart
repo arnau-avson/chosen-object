@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/auth_service.dart';
+import '../../core/profile_service.dart';
 import '../home/home_screen.dart';
 import '../onboarding/onboarding_screen.dart';
 import 'forgot_password_screen.dart';
@@ -86,6 +87,7 @@ class _LoginScreenState extends State<LoginScreen>
         identifier: _identifierController.text.trim(),
         password: _passwordController.text,
       );
+      ProfileService.instance.loadFromBackend();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
@@ -136,6 +138,7 @@ class _LoginScreenState extends State<LoginScreen>
         email: email,
         onVerified: () {
           Navigator.of(ctx).pop();
+          ProfileService.instance.loadFromBackend();
           if (!mounted) return;
           Navigator.of(context).pushAndRemoveUntil(
             PageRouteBuilder(

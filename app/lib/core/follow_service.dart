@@ -10,24 +10,9 @@ class FollowService extends ChangeNotifier {
   static FollowService get instance => _instance;
 
   FollowService._() {
-    // Seed mock followers/following for current user
-    _followers['me'] = {
-      'marta-sala',
-      'atelier-nm',
-      'studio-vera',
-      'clara-boj',
-      'teixidors',
-      'viabizzuno',
-      'laia-font',
-      'anna-riera',
-    };
-    _following['me'] = {
-      'marta-sala',
-      'studio-vera',
-      'teixidors',
-      'viabizzuno',
-      'clara-boj',
-    };
+    // Current user starts empty — real counts loaded from backend
+    _followers['me'] = {};
+    _following['me'] = {};
 
     // Seed some external users
     _followers['marta-sala'] = {'me', 'atelier-nm', 'clara-boj', 'studio-vera'};

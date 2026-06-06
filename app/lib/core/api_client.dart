@@ -4,14 +4,14 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'constants.dart';
+
 // ═════════════════════════════════════════════════════════════
 // ── ApiClient — centralised HTTP wrapper ────────────────────
 // ═════════════════════════════════════════════════════════════
 
 class ApiClient {
-  // Change this to your backend URL.
-  // Android emulator → 10.0.2.2, iOS simulator → 127.0.0.1
-  static const _baseUrl = 'http://10.0.2.2:8000/api/v1';
+  static const _baseUrl = '${ApiConstants.baseUrl}/api/v1';
 
   static ApiClient? _instance;
   static ApiClient get instance => _instance ??= ApiClient._();
@@ -24,20 +24,20 @@ class ApiClient {
   Future<String?> _getToken() async {
     if (_token != null) return _token;
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('access_token');
+    _token = prefs.getString('auth_token');
     return _token;
   }
 
   Future<void> setToken(String token) async {
     _token = token;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('access_token', token);
+    await prefs.setString('auth_token', token);
   }
 
   Future<void> clearToken() async {
     _token = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('access_token');
+    await prefs.remove('auth_token');
   }
 
   // ── Headers ───────────────────────────────────────────────
@@ -52,7 +52,7 @@ class ApiClient {
 
   // ── GET ───────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> get(String path) async {
+  Future<dynamic> get(String path) async {
     final response = await http.get(
       Uri.parse('$_baseUrl$path'),
       headers: await _headers(),
@@ -60,9 +60,23 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  // ── POST (JSON) ─────────────────────────────────────────
+
+  Future<dynamic> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl$path'),
+      headers: await _headers(),
+      body: jsonEncode(body),
+    );
+    return _handleResponse(response);
+  }
+
   // ── PUT (JSON) ────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> put(
+  Future<dynamic> put(
     String path,
     Map<String, dynamic> body,
   ) async {
@@ -72,6 +86,29 @@ class ApiClient {
       body: jsonEncode(body),
     );
     return _handleResponse(response);
+  }
+
+  // ── PATCH (JSON) ──────────────────────────────────────────
+
+  Future<dynamic> patch(String path, [Map<String, dynamic>? body]) async {
+    final response = await http.patch(
+      Uri.parse('$_baseUrl$path'),
+      headers: await _headers(),
+      body: body != null ? jsonEncode(body) : null,
+    );
+    return _handleResponse(response);
+  }
+
+  // ── DELETE ────────────────────────────────────────────────
+
+  Future<void> delete(String path) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl$path'),
+      headers: await _headers(),
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) return;
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    throw ApiException(response.statusCode, (body['detail'] ?? 'Unknown error').toString());
   }
 
   // ── POST multipart (for image uploads) ────────────────────
@@ -110,14 +147,14 @@ class ApiClient {
 
   // ── Response handling ─────────────────────────────────────
 
-  Map<String, dynamic> _handleResponse(http.Response response) {
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+  dynamic _handleResponse(http.Response response) {
+    final body = jsonDecode(response.body);
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
     }
 
-    final detail = body['detail'] ?? 'Unknown error';
+    final detail = body is Map ? (body['detail'] ?? 'Unknown error') : 'Unknown error';
     throw ApiException(response.statusCode, detail.toString());
   }
 }

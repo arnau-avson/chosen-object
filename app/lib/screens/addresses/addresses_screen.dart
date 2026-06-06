@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/address_service.dart';
 import '../../core/app_colors.dart';
+import '../../models/address.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
 
@@ -18,25 +20,6 @@ class AddressesScreen extends StatefulWidget {
 class _AddressesScreenState extends State<AddressesScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
-
-  final List<_Address> _addresses = [
-    _Address(
-      label: 'Home',
-      name: 'Carlos García López',
-      street: 'Calle Velázquez 21',
-      city: '28001 Madrid, Spain',
-      phone: '+34 600 000 000',
-      isDefault: true,
-    ),
-    _Address(
-      label: 'Studio',
-      name: 'Carlos García López',
-      street: 'Carrer del Born 14',
-      city: '08003 Barcelona, Spain',
-      phone: '+34 600 111 222',
-      isDefault: false,
-    ),
-  ];
 
   // ── Animation helpers ──────────────────────────────────────
 
@@ -62,6 +45,9 @@ class _AddressesScreenState extends State<AddressesScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+
+    // Load addresses from backend
+    AddressService.instance.loadFromBackend();
   }
 
   @override
@@ -73,44 +59,156 @@ class _AddressesScreenState extends State<AddressesScreen>
   // ── Actions ────────────────────────────────────────────────
 
   void _setDefault(int index) {
-    setState(() {
-      for (var i = 0; i < _addresses.length; i++) {
-        _addresses[i] = _addresses[i].copyWith(isDefault: i == index);
-      }
-    });
+    AddressService.instance.setDefaultByIndex(index);
   }
 
   void _removeAddress(int index) {
-    final addr = _addresses[index];
-    setState(() => _addresses.removeAt(index));
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${addr.label} address removed',
-          style: GoogleFonts.inter(
-              fontSize: 13, fontWeight: FontWeight.w400, color: AppColors.bone),
-        ),
-        duration: const Duration(seconds: 2),
-        backgroundColor: AppColors.ink,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        action: SnackBarAction(
-          label: 'Undo',
-          textColor: AppColors.gold,
-          onPressed: () => setState(() => _addresses.insert(index, addr)),
+    final svc = AddressService.instance;
+    final address = svc.addresses[index];
+
+    showDialog(
+      context: context,
+      barrierColor: AppColors.ink.withValues(alpha: 0.3),
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.delete_outline_rounded,
+                    size: 20, color: AppColors.danger),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Remove address',
+                style: GoogleFonts.fraunces(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.inkStrong,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This will permanently remove your "${address.label}" address.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.muted,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: AppColors.hairline, width: 1),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.inkSoft,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        svc.deleteAddressByIndex(index);
+
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${address.label} address removed',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.bone),
+                            ),
+                            duration: const Duration(seconds: 2),
+                            backgroundColor: AppColors.ink,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6)),
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            action: SnackBarAction(
+                              label: 'Undo',
+                              textColor: AppColors.gold,
+                              onPressed: () => svc.reAddAddress(address),
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Remove',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.surface,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  void _openAddressSheet({_Address? existing, int? editIndex}) {
+  void _openAddressSheet({Address? existing}) {
     final labelCtrl = TextEditingController(text: existing?.label ?? '');
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final nameCtrl = TextEditingController(text: existing?.fullName ?? '');
     final streetCtrl = TextEditingController(text: existing?.street ?? '');
+    final numberCtrl = TextEditingController(text: existing?.number ?? '');
+    final detailsCtrl =
+        TextEditingController(text: existing?.details ?? '');
     final cityCtrl = TextEditingController(text: existing?.city ?? '');
+    final postalCtrl =
+        TextEditingController(text: existing?.postalCode ?? '');
+    final countryCtrl = TextEditingController(text: existing?.country ?? '');
     final phoneCtrl = TextEditingController(text: existing?.phone ?? '');
+    final isEdit = existing != null;
+
+    var isDefault = existing?.isDefault ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -119,7 +217,8 @@ class _AddressesScreenState extends State<AddressesScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       isScrollControlled: true,
-      builder: (ctx) => Padding(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
         padding: EdgeInsets.fromLTRB(
             24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: SingleChildScrollView(
@@ -138,22 +237,98 @@ class _AddressesScreenState extends State<AddressesScreen>
                 ),
               ),
               const SizedBox(height: 20),
-              Text(
-                editIndex != null ? 'Edit address' : 'New address',
-                style: GoogleFonts.fraunces(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.inkStrong,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      isEdit ? 'Edit address' : 'New address',
+                      style: GoogleFonts.fraunces(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.inkStrong,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setSheetState(() => isDefault = !isDefault),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDefault
+                            ? AppColors.sage.withValues(alpha: 0.12)
+                            : AppColors.ink.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: isDefault
+                              ? AppColors.sage.withValues(alpha: 0.3)
+                              : AppColors.hairline,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isDefault
+                                ? Icons.check_circle_rounded
+                                : Icons.circle_outlined,
+                            size: 14,
+                            color: isDefault
+                                ? AppColors.sage
+                                : AppColors.muted,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Default',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isDefault
+                                  ? AppColors.sage
+                                  : AppColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
-              _SheetField(label: 'Label (e.g. Home, Studio)', controller: labelCtrl),
+              _SheetField(
+                  label: 'Label (e.g. Home, Studio)', controller: labelCtrl),
               const SizedBox(height: 14),
               _SheetField(label: 'Full name', controller: nameCtrl),
               const SizedBox(height: 14),
-              _SheetField(label: 'Street address', controller: streetCtrl),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: _SheetField(
+                        label: 'Street', controller: streetCtrl),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 1,
+                    child: _SheetField(
+                        label: 'Number', controller: numberCtrl),
+                  ),
+                ],
+              ),
               const SizedBox(height: 14),
-              _SheetField(label: 'City, postal code, country', controller: cityCtrl),
+              _SheetField(
+                label: 'Floor, door, block...',
+                controller: detailsCtrl,
+                optional: true,
+              ),
+              const SizedBox(height: 14),
+              _SheetField(label: 'City', controller: cityCtrl),
+              const SizedBox(height: 14),
+              _SheetField(label: 'Postal code', controller: postalCtrl),
+              const SizedBox(height: 14),
+              _SheetField(label: 'Country', controller: countryCtrl),
               const SizedBox(height: 14),
               _SheetField(label: 'Phone number', controller: phoneCtrl),
               const SizedBox(height: 24),
@@ -161,26 +336,42 @@ class _AddressesScreenState extends State<AddressesScreen>
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    if (labelCtrl.text.trim().isEmpty ||
-                        nameCtrl.text.trim().isEmpty) {
-                      Navigator.pop(ctx);
-                      return;
-                    }
-                    final addr = _Address(
+                    final allFilled = [
+                      labelCtrl,
+                      nameCtrl,
+                      streetCtrl,
+                      numberCtrl,
+                      cityCtrl,
+                      postalCtrl,
+                      countryCtrl,
+                      phoneCtrl,
+                    ].every((c) => c.text.trim().isNotEmpty);
+
+                    if (!allFilled) return;
+
+                    final detailsTrimmed = detailsCtrl.text.trim();
+                    final addr = Address(
+                      id: existing?.id,
                       label: labelCtrl.text.trim(),
-                      name: nameCtrl.text.trim(),
+                      fullName: nameCtrl.text.trim(),
                       street: streetCtrl.text.trim(),
+                      number: numberCtrl.text.trim(),
+                      details: detailsTrimmed.isEmpty
+                          ? null
+                          : detailsTrimmed,
                       city: cityCtrl.text.trim(),
+                      postalCode: postalCtrl.text.trim(),
+                      country: countryCtrl.text.trim(),
                       phone: phoneCtrl.text.trim(),
-                      isDefault: existing?.isDefault ?? false,
+                      isDefault: isDefault,
                     );
-                    setState(() {
-                      if (editIndex != null) {
-                        _addresses[editIndex] = addr;
-                      } else {
-                        _addresses.add(addr);
-                      }
-                    });
+                    final svc = AddressService.instance;
+                    if (isEdit && existing.id != null) {
+                      svc.updateAddress(existing.id!, addr);
+                      if (isDefault) svc.setDefault(existing.id!);
+                    } else {
+                      svc.addAddress(addr);
+                    }
                     Navigator.pop(ctx);
                   },
                   style: ElevatedButton.styleFrom(
@@ -192,7 +383,7 @@ class _AddressesScreenState extends State<AddressesScreen>
                     elevation: 0,
                   ),
                   child: Text(
-                    editIndex != null ? 'Save' : 'Add',
+                    isEdit ? 'Save' : 'Add',
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -203,6 +394,7 @@ class _AddressesScreenState extends State<AddressesScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -215,103 +407,60 @@ class _AddressesScreenState extends State<AddressesScreen>
       backgroundColor: AppColors.bone,
       appBar: const SharedAppBar(currentRoute: '/addresses'),
       drawer: const AppDrawer(currentRoute: '/addresses'),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header + Add button ──
-            FadeTransition(
-              opacity: _fade(0.0, 0.45),
-              child: SlideTransition(
-                position: _slide(0.0, 0.45),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Addresses',
-                          style: GoogleFonts.fraunces(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.inkStrong,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => _openAddressSheet(),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                                color: AppColors.hairline, width: 1),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.add_rounded,
-                                  size: 16, color: AppColors.inkSoft),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Add new',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.inkSoft,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+      body: ListenableBuilder(
+        listenable: AddressService.instance,
+        builder: (context, _) {
+          final addresses = AddressService.instance.addresses;
 
-            const SizedBox(height: 24),
-
-            // ── Address cards ──
-            for (var i = 0; i < _addresses.length; i++) ...[
-              FadeTransition(
-                opacity: _fade(0.06 + i * 0.10, 0.50 + i * 0.10),
-                child: SlideTransition(
-                  position: _slide(0.06 + i * 0.10, 0.50 + i * 0.10),
-                  child: _AddressCard(
-                    address: _addresses[i],
-                    onSetDefault: () => _setDefault(i),
-                    onEdit: () =>
-                        _openAddressSheet(existing: _addresses[i], editIndex: i),
-                    onRemove: () => _removeAddress(i),
-                  ),
-                ),
-              ),
-              if (i < _addresses.length - 1) const SizedBox(height: 12),
-            ],
-
-            if (_addresses.isEmpty)
-              FadeTransition(
-                opacity: _fade(0.06, 0.50),
-                child: SlideTransition(
-                  position: _slide(0.06, 0.50),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 48),
-                    child: Center(
-                      child: Column(
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header + Add button ──
+                FadeTransition(
+                  opacity: _fade(0.0, 0.45),
+                  child: SlideTransition(
+                    position: _slide(0.0, 0.45),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                      child: Row(
                         children: [
-                          Icon(Icons.location_off_outlined,
-                              size: 36, color: AppColors.muted),
-                          const SizedBox(height: 10),
-                          Text(
-                            'No addresses yet',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.muted,
+                          Expanded(
+                            child: Text(
+                              'Addresses',
+                              style: GoogleFonts.fraunces(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.inkStrong,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => _openAddressSheet(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: AppColors.hairline, width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.add_rounded,
+                                      size: 16, color: AppColors.inkSoft),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Add new',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.inkSoft,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -319,45 +468,64 @@ class _AddressesScreenState extends State<AddressesScreen>
                     ),
                   ),
                 ),
-              ),
 
-            const SizedBox(height: 32),
-          ],
-        ),
+                const SizedBox(height: 24),
+
+                // ── Address cards ──
+                for (var i = 0; i < addresses.length; i++) ...[
+                  FadeTransition(
+                    opacity: _fade(0.06 + i * 0.10, 0.50 + i * 0.10),
+                    child: SlideTransition(
+                      position: _slide(0.06 + i * 0.10, 0.50 + i * 0.10),
+                      child: _AddressCard(
+                        address: addresses[i],
+                        onSetDefault: () => _setDefault(i),
+                        onEdit: () =>
+                            _openAddressSheet(existing: addresses[i]),
+                        onRemove: () => _removeAddress(i),
+                      ),
+                    ),
+                  ),
+                  if (i < addresses.length - 1) const SizedBox(height: 12),
+                ],
+
+                if (addresses.isEmpty)
+                  FadeTransition(
+                    opacity: _fade(0.06, 0.50),
+                    child: SlideTransition(
+                      position: _slide(0.06, 0.50),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 48),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.location_off_outlined,
+                                  size: 36, color: AppColors.muted),
+                              const SizedBox(height: 10),
+                              Text(
+                                'No addresses yet',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 32),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
-}
-
-// ═════════════════════════════════════════════════════════════
-// ── Address model ───────────────────────────────────────────
-// ═════════════════════════════════════════════════════════════
-
-class _Address {
-  final String label;
-  final String name;
-  final String street;
-  final String city;
-  final String phone;
-  final bool isDefault;
-
-  const _Address({
-    required this.label,
-    required this.name,
-    required this.street,
-    required this.city,
-    required this.phone,
-    required this.isDefault,
-  });
-
-  _Address copyWith({bool? isDefault}) => _Address(
-        label: label,
-        name: name,
-        street: street,
-        city: city,
-        phone: phone,
-        isDefault: isDefault ?? this.isDefault,
-      );
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -365,7 +533,7 @@ class _Address {
 // ═════════════════════════════════════════════════════════════
 
 class _AddressCard extends StatelessWidget {
-  final _Address address;
+  final Address address;
   final VoidCallback onSetDefault;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
@@ -436,7 +604,7 @@ class _AddressCard extends StatelessWidget {
 
           // Name
           Text(
-            address.name,
+            address.fullName,
             style: GoogleFonts.inter(
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -445,20 +613,33 @@ class _AddressCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
 
-          // Street
+          // Street + number
           Text(
-            address.street,
+            '${address.street} ${address.number}',
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w400,
               color: AppColors.inkSoft,
             ),
           ),
+
+          // Details (floor, door, block...)
+          if (address.details != null && address.details!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              address.details!,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: AppColors.muted,
+              ),
+            ),
+          ],
           const SizedBox(height: 2),
 
-          // City
+          // City, postal code, country
           Text(
-            address.city,
+            '${address.postalCode} ${address.city}, ${address.country}',
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w400,
@@ -470,12 +651,12 @@ class _AddressCard extends StatelessWidget {
           // Phone
           Text(
             address.phone,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: AppColors.muted,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: AppColors.muted,
+              ),
             ),
-          ),
 
           const SizedBox(height: 16),
           const Divider(color: AppColors.hairline, height: 1, thickness: 1),
@@ -539,21 +720,41 @@ class _AddressCard extends StatelessWidget {
 class _SheetField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
+  final bool optional;
 
-  const _SheetField({required this.label, required this.controller});
+  const _SheetField({
+    required this.label,
+    required this.controller,
+    this.optional = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.muted,
-          ),
+        Row(
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.muted,
+              ),
+            ),
+            if (optional) ...[
+              const SizedBox(width: 4),
+              Text(
+                '(optional)',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.muted.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: 6),
         TextField(

@@ -41,10 +41,28 @@ class ProfileService:
         if not fields:
             return ProfileOut.from_user(user)
 
+        from ..repositories.user_repository import UserRepository
+        user_repo = UserRepository(self.repo.db)
+
+        # Validate username if being changed
+        if "username" in fields and fields["username"] is not None:
+            new_username = fields["username"].strip().lower()
+            if len(new_username) < 6:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username must be at least 6 characters.",
+                )
+            existing = user_repo.get_by_username(new_username)
+            if existing and existing.id != user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This username is already taken.",
+                )
+            fields["username"] = new_username
+
         # Validate handle uniqueness if being changed
         if "handle" in fields and fields["handle"] is not None:
-            from ..repositories.user_repository import UserRepository
-            existing = UserRepository(self.repo.db).get_by_username(fields["handle"])
+            existing = user_repo.get_by_username(fields["handle"])
             if existing and existing.id != user.id:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,

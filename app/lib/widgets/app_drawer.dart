@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
 import '../core/auth_service.dart';
+import '../core/profile_service.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/map/map_screen.dart';
@@ -159,70 +160,93 @@ class _AppDrawerState extends State<AppDrawer>
   // ── Header ──────────────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context) {
+    final p = ProfileService.instance;
     return SafeArea(
       bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 22, 16, 18),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: AppColors.ink,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.person_outline_rounded,
-                size: 22,
-                color: AppColors.bone,
-              ),
-            ),
-
-            const SizedBox(width: 14),
-
-            // Nombre y etiqueta
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'My account',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.muted,
-                      letterSpacing: 0.8,
-                    ),
+      child: ListenableBuilder(
+        listenable: p,
+        builder: (context, _) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 16, 18),
+            child: Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: p.avatarType == 'image' ? null : p.avatarColor,
+                    image: p.avatarType == 'image' &&
+                            p.avatarImageBytes != null
+                        ? DecorationImage(
+                            image: MemoryImage(p.avatarImageBytes!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'baarrero',
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.inkStrong,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                  alignment: Alignment.center,
+                  child: p.avatarType == 'image' &&
+                          p.avatarImageBytes != null
+                      ? null
+                      : Text(
+                          p.initials.isNotEmpty ? p.initials : '?',
+                          style: GoogleFonts.fraunces(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
+                        ),
+                ),
 
-            // Botón cerrar
-            IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close_rounded, size: 18),
-              color: AppColors.muted,
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(),
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Close',
+                const SizedBox(width: 14),
+
+                // Nombre y etiqueta
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'My account',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.muted,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        p.handle.isNotEmpty
+                            ? p.handle
+                            : p.name.isNotEmpty
+                                ? p.name
+                                : p.username,
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.inkStrong,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Botón cerrar
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  color: AppColors.muted,
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Close',
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

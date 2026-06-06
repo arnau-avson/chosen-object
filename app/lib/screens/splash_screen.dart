@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
 import '../core/auth_service.dart';
+import '../core/profile_service.dart';
 import 'home/home_screen.dart';
 import 'auth/login_screen.dart';
 
@@ -47,6 +48,10 @@ class _SplashScreenState extends State<SplashScreen>
       authenticated = false;
     }
     if (!mounted) return;
+
+    if (authenticated) {
+      ProfileService.instance.loadFromBackend();
+    }
 
     // Authenticated → home. Not authenticated → login.
     Navigator.of(context).pushReplacement(

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.repositories.user_repository import UserRepository
 from app.schemas.profile import ProfileOut, ProfileUpdate
 from app.services.profile_service import ProfileService
 
@@ -34,6 +35,24 @@ def update_profile(
     db: Annotated[Session, Depends(get_db)],
 ) -> ProfileOut:
     return ProfileService(db).update_profile(current_user, data)
+
+
+@router.get(
+    "/check-username/{username}",
+    summary="Check if a username is available",
+)
+def check_username(
+    username: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    name = username.strip().lower()
+    if len(name) < 6:
+        return {"available": False, "reason": "Must be at least 6 characters."}
+    existing = UserRepository(db).get_by_username(name)
+    if existing and existing.id != current_user.id:
+        return {"available": False, "reason": "This username is already taken."}
+    return {"available": True}
 
 
 @router.post(

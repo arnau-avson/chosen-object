@@ -252,6 +252,7 @@ class _MapScreenState extends State<MapScreen> {
                         options: MapOptions(
                           initialCenter: LatLng(40.4, -1.5),
                           initialZoom: 5.8,
+                          minZoom: 3,
                           onTap: (_, _) =>
                               setState(() => _selected = null),
                         ),

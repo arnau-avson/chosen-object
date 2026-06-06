@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/auth_service.dart';
+import '../../core/profile_service.dart';
 import '../home/home_screen.dart';
 import 'login_screen.dart';
 
@@ -154,6 +155,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         email: _emailCtrl.text.trim(),
         pin: _pinCtrl.text.trim(),
       );
+      ProfileService.instance.loadFromBackend();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
