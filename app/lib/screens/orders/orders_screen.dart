@@ -11,7 +11,9 @@ import '../product_detail/product_detail_screen.dart';
 // ═════════════════════════════════════════════════════════════
 
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  final bool canGoBack;
+
+  const OrdersScreen({super.key, this.canGoBack = false});
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -86,13 +88,28 @@ class _OrdersScreenState extends State<OrdersScreen>
                 position: _slide(0.0, 0.45),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                  child: Text(
-                    'Orders',
-                    style: GoogleFonts.fraunces(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.inkStrong,
-                    ),
+                  child: Row(
+                    children: [
+                      if (widget.canGoBack) ...[
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: const Icon(
+                            Icons.arrow_back_rounded,
+                            size: 20,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Text(
+                        'Orders',
+                        style: GoogleFonts.fraunces(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.inkStrong,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
 import '../screens/collection/collection_screen.dart';
+import '../screens/home/home_screen.dart';
 
 class SharedAppBar extends StatefulWidget implements PreferredSizeWidget {
   final String? currentRoute;
@@ -96,7 +97,20 @@ class _SharedAppBarState extends State<SharedAppBar>
           ? IconButton(
               icon: const Icon(Icons.arrow_back_rounded, size: 21),
               color: AppColors.inkSoft,
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                } else {
+                  Navigator.of(context).pushReplacement(
+                    PageRouteBuilder(
+                      pageBuilder: (_, _, _) => const HomeScreen(),
+                      transitionsBuilder: (_, animation, _, child) =>
+                          FadeTransition(opacity: animation, child: child),
+                      transitionDuration: const Duration(milliseconds: 300),
+                    ),
+                  );
+                }
+              },
               tooltip: 'Back',
             )
           : null,

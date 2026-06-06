@@ -25,6 +25,17 @@ const _palette = <Color>[
   Color(0xFF7A5A6A),
 ];
 
+const _disciplines = [
+  'Painting',
+  'Ceramic',
+  'Furniture',
+  'Sculpture',
+  'Lighting',
+  'Textiles',
+  'Photography',
+  'Mixed Media',
+];
+
 // ═════════════════════════════════════════════════════════════
 // ── Edit Profile Screen ─────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
@@ -40,13 +51,30 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
 
+  // Personal
   late final TextEditingController _nameCtrl;
   late final TextEditingController _handleCtrl;
   late final TextEditingController _locationCtrl;
   late final TextEditingController _bioCtrl;
-
   late Color _avatarColor;
   late Color _bannerColor;
+
+  // Studio
+  late final TextEditingController _studioNameCtrl;
+  late String _discipline;
+  late final TextEditingController _studioBioCtrl;
+  late final TextEditingController _cityCtrl;
+  late final TextEditingController _countryCtrl;
+
+  // Online
+  late final TextEditingController _websiteCtrl;
+  late final TextEditingController _instagramCtrl;
+  late final TextEditingController _portfolioCtrl;
+
+  // Invoicing
+  late final TextEditingController _legalCtrl;
+  late final TextEditingController _vatCtrl;
+  late final TextEditingController _ibanCtrl;
 
   // ── Animation helpers ──────────────────────────────────────
 
@@ -76,6 +104,24 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     _avatarColor = p.avatarColor;
     _bannerColor = p.bannerColor;
 
+    _studioNameCtrl = TextEditingController(text: p.studioName);
+    _discipline = p.discipline;
+    _studioBioCtrl = TextEditingController(
+      text:
+          'Brass, alabaster, blown glass. A lighting studio in the Marais '
+          'working with European foundries on small editions.',
+    );
+    _cityCtrl = TextEditingController(text: p.city);
+    _countryCtrl = TextEditingController(text: p.country);
+
+    _websiteCtrl = TextEditingController(text: p.website);
+    _instagramCtrl = TextEditingController(text: p.instagram);
+    _portfolioCtrl = TextEditingController(text: p.portfolio);
+
+    _legalCtrl = TextEditingController(text: p.legalEntity);
+    _vatCtrl = TextEditingController(text: p.vatId);
+    _ibanCtrl = TextEditingController(text: p.iban);
+
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -88,6 +134,16 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     _handleCtrl.dispose();
     _locationCtrl.dispose();
     _bioCtrl.dispose();
+    _studioNameCtrl.dispose();
+    _studioBioCtrl.dispose();
+    _cityCtrl.dispose();
+    _countryCtrl.dispose();
+    _websiteCtrl.dispose();
+    _instagramCtrl.dispose();
+    _portfolioCtrl.dispose();
+    _legalCtrl.dispose();
+    _vatCtrl.dispose();
+    _ibanCtrl.dispose();
     _anim.dispose();
     super.dispose();
   }
@@ -101,6 +157,16 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       handle: _handleCtrl.text.trim(),
       location: _locationCtrl.text.trim(),
       bio: _bioCtrl.text.trim(),
+      studioName: _studioNameCtrl.text.trim(),
+      discipline: _discipline,
+      city: _cityCtrl.text.trim(),
+      country: _countryCtrl.text.trim(),
+      website: _websiteCtrl.text.trim(),
+      instagram: _instagramCtrl.text.trim(),
+      portfolio: _portfolioCtrl.text.trim(),
+      legalEntity: _legalCtrl.text.trim(),
+      vatId: _vatCtrl.text.trim(),
+      iban: _ibanCtrl.text.trim(),
     );
     p.updateAvatarColor(_avatarColor);
     p.updateBannerColor(_bannerColor);
@@ -181,6 +247,100 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
   }
 
+  // ── Discipline picker ──────────────────────────────────────
+
+  void _pickDiscipline() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.hairline,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Discipline',
+              style: GoogleFonts.fraunces(
+                fontSize: 18,
+                fontWeight: FontWeight.w400,
+                color: AppColors.inkStrong,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ..._disciplines.map((d) {
+              final selected = d == _discipline;
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  splashColor: AppColors.ink.withValues(alpha: 0.05),
+                  onTap: () {
+                    setState(() => _discipline = d);
+                    Navigator.of(context).pop();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 13, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            d,
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: selected
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                              color: selected
+                                  ? AppColors.inkStrong
+                                  : AppColors.inkSoft,
+                            ),
+                          ),
+                        ),
+                        if (selected)
+                          const Icon(Icons.check_rounded,
+                              size: 16, color: AppColors.accent),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Section header (editorial style) ───────────────────────
+
+  Widget _sectionLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 32, 16, 14),
+      child: Text(
+        text.toUpperCase(),
+        style: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.5,
+          color: AppColors.muted2,
+        ),
+      ),
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────
 
   @override
@@ -194,7 +354,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
     return Scaffold(
       backgroundColor: AppColors.bone,
-      appBar: SharedAppBar(
+      appBar: const SharedAppBar(
         currentRoute: '/edit-profile',
         showBack: true,
       ),
@@ -225,140 +385,163 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
             // ── Banner + Avatar ──
             FadeTransition(
-              opacity: _fade(0.06, 0.50),
+              opacity: _fade(0.04, 0.48),
               child: SlideTransition(
-                position: _slide(0.06, 0.50),
-                child: SizedBox(
-                  height: 140 + 44,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // Banner
-                      Positioned(
-                        top: 0,
-                        left: 16,
-                        right: 16,
-                        height: 140,
-                        child: GestureDetector(
-                          onTap: () => _pickColor(
-                            title: 'Banner colour',
-                            current: _bannerColor,
-                            onPick: (c) =>
-                                setState(() => _bannerColor = c),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              color: _bannerColor,
-                              alignment: Alignment.center,
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.surface
-                                      .withValues(alpha: 0.55),
-                                  shape: BoxShape.circle,
-                                ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.camera_alt_outlined,
-                                  size: 20,
-                                  color: AppColors.inkSoft,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                position: _slide(0.04, 0.48),
+                child: _buildCoverSection(initials),
+              ),
+            ),
 
-                      // Avatar
-                      Positioned(
-                        bottom: 0,
-                        left: 36,
-                        child: GestureDetector(
-                          onTap: () => _pickColor(
-                            title: 'Avatar colour',
-                            current: _avatarColor,
-                            onPick: (c) =>
-                                setState(() => _avatarColor = c),
+            // ════════════════════════════════════════════════════
+            // ── STUDIO INFO ──
+            // ════════════════════════════════════════════════════
+            FadeTransition(
+              opacity: _fade(0.08, 0.52),
+              child: SlideTransition(
+                position: _slide(0.08, 0.52),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('Studio Info'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          _Field(
+                              label: 'Studio name',
+                              controller: _studioNameCtrl),
+                          const SizedBox(height: 16),
+                          _TapField(
+                            label: 'Discipline',
+                            value: _discipline,
+                            onTap: _pickDiscipline,
                           ),
-                          child: Stack(
-                            children: [
-                              Container(
-                                width: 88,
-                                height: 88,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: _avatarColor,
-                                  border: Border.all(
-                                      color: AppColors.surface, width: 4),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  initials,
-                                  style: GoogleFonts.fraunces(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w400,
-                                    color: Colors.white
-                                        .withValues(alpha: 0.85),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  width: 28,
-                                  height: 28,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.ink,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: AppColors.surface,
-                                        width: 2),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.camera_alt_outlined,
-                                    size: 13,
-                                    color: AppColors.bone,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 16),
+                          _Field(
+                            label: 'Bio',
+                            controller: _studioBioCtrl,
+                            maxLines: 4,
                           ),
-                        ),
+                          const SizedBox(height: 16),
+                          _Field(label: 'City', controller: _cityCtrl),
+                          const SizedBox(height: 16),
+                          _Field(label: 'Country', controller: _countryCtrl),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
 
-            const SizedBox(height: 28),
-
-            // ── Form fields ──
+            // ════════════════════════════════════════════════════
+            // ── ONLINE PRESENCE ──
+            // ════════════════════════════════════════════════════
             FadeTransition(
-              opacity: _fade(0.12, 0.55),
+              opacity: _fade(0.12, 0.56),
               child: SlideTransition(
-                position: _slide(0.12, 0.55),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      _Field(label: 'Name', controller: _nameCtrl),
-                      const SizedBox(height: 16),
-                      _Field(label: 'Handle', controller: _handleCtrl),
-                      const SizedBox(height: 16),
-                      _Field(label: 'Location', controller: _locationCtrl),
-                      const SizedBox(height: 16),
-                      _Field(
-                        label: 'Bio',
-                        controller: _bioCtrl,
-                        maxLines: 4,
+                position: _slide(0.12, 0.56),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('Online Presence'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          _Field(
+                              label: 'Website', controller: _websiteCtrl),
+                          const SizedBox(height: 16),
+                          _Field(
+                              label: 'Instagram',
+                              controller: _instagramCtrl),
+                          const SizedBox(height: 16),
+                          _Field(
+                              label: 'Portfolio link',
+                              controller: _portfolioCtrl),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ════════════════════════════════════════════════════
+            // ── INVOICING ──
+            // ════════════════════════════════════════════════════
+            FadeTransition(
+              opacity: _fade(0.16, 0.60),
+              child: SlideTransition(
+                position: _slide(0.16, 0.60),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('Invoicing'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          _Field(
+                              label: 'Legal entity name',
+                              controller: _legalCtrl,
+                              optional: true),
+                          const SizedBox(height: 16),
+                          _Field(
+                              label: 'VAT / Tax ID',
+                              controller: _vatCtrl,
+                              optional: true),
+                          const SizedBox(height: 16),
+                          _Field(label: 'IBAN', controller: _ibanCtrl),
+                          const SizedBox(height: 16),
+                          _ReadOnlyField(
+                            label: 'Invoice prefix',
+                            value: ProfileService.instance.invoicePrefix,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ════════════════════════════════════════════════════
+            // ── COMMISSION INFO ──
+            // ════════════════════════════════════════════════════
+            FadeTransition(
+              opacity: _fade(0.20, 0.64),
+              child: SlideTransition(
+                position: _slide(0.20, 0.64),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('Commission Info'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(6),
+                          border:
+                              Border.all(color: AppColors.hairline, width: 1),
+                        ),
+                        child: Text(
+                          'Chosen Object fee: 18% of sale price + Stripe '
+                          'processing (~2.9% + €0.30). Payouts processed '
+                          'within 2 business days of buyer confirmation.',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.muted,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -367,9 +550,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
             // ── Save button ──
             FadeTransition(
-              opacity: _fade(0.18, 0.60),
+              opacity: _fade(0.24, 0.68),
               child: SlideTransition(
-                position: _slide(0.18, 0.60),
+                position: _slide(0.24, 0.68),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: SizedBox(
@@ -404,6 +587,138 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       ),
     );
   }
+
+  // ── Cover section (banner + avatar + change cover) ─────────
+
+  Widget _buildCoverSection(String initials) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 140 + 44,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Banner
+              Positioned(
+                top: 0,
+                left: 16,
+                right: 16,
+                height: 140,
+                child: GestureDetector(
+                  onTap: () => _pickColor(
+                    title: 'Banner colour',
+                    current: _bannerColor,
+                    onPick: (c) => setState(() => _bannerColor = c),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      color: _bannerColor,
+                      alignment: Alignment.center,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface.withValues(alpha: 0.55),
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.camera_alt_outlined,
+                          size: 20,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Avatar
+              Positioned(
+                bottom: 0,
+                left: 36,
+                child: GestureDetector(
+                  onTap: () => _pickColor(
+                    title: 'Avatar colour',
+                    current: _avatarColor,
+                    onPick: (c) => setState(() => _avatarColor = c),
+                  ),
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _avatarColor,
+                          border: Border.all(
+                              color: AppColors.surface, width: 4),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          initials,
+                          style: GoogleFonts.fraunces(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: AppColors.ink,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: AppColors.surface, width: 2),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.camera_alt_outlined,
+                            size: 13,
+                            color: AppColors.bone,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // "Change cover" tap label
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: () => _pickColor(
+                title: 'Banner colour',
+                current: _bannerColor,
+                onPick: (c) => setState(() => _bannerColor = c),
+              ),
+              child: Text(
+                'Change cover',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.accent,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -414,11 +729,13 @@ class _Field extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final int maxLines;
+  final bool optional;
 
   const _Field({
     required this.label,
     required this.controller,
     this.maxLines = 1,
+    this.optional = false,
   });
 
   @override
@@ -426,16 +743,31 @@ class _Field extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label.toUpperCase(),
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.5,
-            color: AppColors.muted2,
-          ),
+        Row(
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: AppColors.muted,
+              ),
+            ),
+            if (optional) ...[
+              const SizedBox(width: 6),
+              Text(
+                'Optional',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w400,
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.muted2,
+                ),
+              ),
+            ],
+          ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
@@ -451,15 +783,133 @@ class _Field extends StatelessWidget {
               color: AppColors.inkStrong,
             ),
             cursorColor: AppColors.ink,
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
+            decoration: const InputDecoration(
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: InputBorder.none,
-              hintStyle: GoogleFonts.inter(
-                fontSize: 14,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Tappable field (opens picker) ───────────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _TapField extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  const _TapField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: AppColors.muted,
+          ),
+        ),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.hairline, width: 1),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    value,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.inkStrong,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.expand_more_rounded,
+                    size: 18, color: AppColors.muted),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Read-only field ─────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _ReadOnlyField extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _ReadOnlyField({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
                 fontWeight: FontWeight.w400,
                 color: AppColors.muted,
               ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '(read-only)',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+                fontStyle: FontStyle.italic,
+                color: AppColors.muted2,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.hairline2.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppColors.hairline, width: 1),
+          ),
+          child: Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: AppColors.muted,
             ),
           ),
         ),

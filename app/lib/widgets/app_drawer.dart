@@ -16,6 +16,9 @@ import '../screens/notifications/notifications_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/list_piece/list_piece_screen.dart';
+import '../screens/dashboard/dashboard_screen.dart';
+import '../screens/rental_calendar/rental_calendar_screen.dart';
 import '../models/app_notification.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -57,7 +60,6 @@ class _AppDrawerState extends State<AppDrawer>
       _Item('List a piece',    Icons.add_photo_alternate_outlined,  '/list'),
       _Item('Dashboard',       Icons.bar_chart_rounded,             '/dashboard'),
       _Item('Rental calendar', Icons.calendar_today_outlined,       '/rental-calendar'),
-      _Item('Edit studio',     Icons.business_center_outlined,      '/edit-studio'),
     ]),
     _Section('Editorial', [
       _Item('Get the look',    Icons.auto_awesome_outlined,         '/get-the-look'),
@@ -350,6 +352,12 @@ class _ItemWidget extends StatelessWidget {
         screen = const PaymentsScreen();
       case '/addresses':
         screen = const AddressesScreen();
+      case '/list':
+        screen = const ListPieceScreen();
+      case '/dashboard':
+        screen = const DashboardScreen();
+      case '/rental-calendar':
+        screen = const RentalCalendarScreen();
     }
 
     if (screen != null) {

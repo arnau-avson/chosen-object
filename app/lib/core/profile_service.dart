@@ -31,6 +31,26 @@ class ProfileService extends ChangeNotifier {
   Color _avatarColor = const Color(0xFF2E2520);
   Color _bannerColor = const Color(0xFF4A3F35);
 
+  // ── Studio fields ───────────────────────────────────────
+
+  String _studioName = 'Atelier Noire';
+  String _discipline = 'Lighting';
+  String _city = 'Paris';
+  String _country = 'France';
+
+  // ── Online presence ─────────────────────────────────────
+
+  String _website = 'https://ateliernoire.fr';
+  String _instagram = '@atelier.noire';
+  String _portfolio = 'https://portfolio.com';
+
+  // ── Invoicing ───────────────────────────────────────────
+
+  String _legalEntity = 'Atelier Noire SARL';
+  String _vatId = 'FR 12 345 678 901';
+  String _iban = 'FR76 1234 5678 9012 3456 7890 123';
+  final String _invoicePrefix = 'CO-ATELIERNOIRE-';
+
   // ── Getters ───────────────────────────────────────────────
 
   String get name => _name;
@@ -46,6 +66,20 @@ class ProfileService extends ChangeNotifier {
   bool get verified => _verified;
   Color get avatarColor => _avatarColor;
   Color get bannerColor => _bannerColor;
+
+  String get studioName => _studioName;
+  String get discipline => _discipline;
+  String get city => _city;
+  String get country => _country;
+
+  String get website => _website;
+  String get instagram => _instagram;
+  String get portfolio => _portfolio;
+
+  String get legalEntity => _legalEntity;
+  String get vatId => _vatId;
+  String get iban => _iban;
+  String get invoicePrefix => _invoicePrefix;
 
   String get initials => _name
       .split(' ')
@@ -63,6 +97,16 @@ class ProfileService extends ChangeNotifier {
     String? role,
     String? bio,
     List<String>? specialties,
+    String? studioName,
+    String? discipline,
+    String? city,
+    String? country,
+    String? website,
+    String? instagram,
+    String? portfolio,
+    String? legalEntity,
+    String? vatId,
+    String? iban,
   }) {
     if (name != null) _name = name;
     if (handle != null) _handle = handle;
@@ -70,6 +114,16 @@ class ProfileService extends ChangeNotifier {
     if (role != null) _role = role;
     if (bio != null) _bio = bio;
     if (specialties != null) _specialties = specialties;
+    if (studioName != null) _studioName = studioName;
+    if (discipline != null) _discipline = discipline;
+    if (city != null) _city = city;
+    if (country != null) _country = country;
+    if (website != null) _website = website;
+    if (instagram != null) _instagram = instagram;
+    if (portfolio != null) _portfolio = portfolio;
+    if (legalEntity != null) _legalEntity = legalEntity;
+    if (vatId != null) _vatId = vatId;
+    if (iban != null) _iban = iban;
     notifyListeners();
   }
 

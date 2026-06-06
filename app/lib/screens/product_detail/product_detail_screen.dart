@@ -619,15 +619,44 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    product.price,
-                    style: GoogleFonts.fraunces(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.inkStrong,
-                      height: 1.1,
+                  if (product.oldPrice != null) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          product.oldPrice!,
+                          style: GoogleFonts.fraunces(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w400,
+                            color: const Color(0xFFB04A4A),
+                            height: 1.1,
+                            decoration: TextDecoration.lineThrough,
+                            decorationColor: const Color(0xFFB04A4A),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          product.price,
+                          style: GoogleFonts.fraunces(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.inkStrong,
+                            height: 1.1,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                  ] else
+                    Text(
+                      product.price,
+                      style: GoogleFonts.fraunces(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.inkStrong,
+                        height: 1.1,
+                      ),
+                    ),
                 ],
               ),
             ),

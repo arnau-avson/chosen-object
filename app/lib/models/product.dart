@@ -19,6 +19,9 @@ class Product {
   final String? weight;
   final List<String> tags; // e.g. ['Contemporary', 'Mediterranean']
   final bool verified;
+  final String? oldPrice; // previous price for strikethrough display
+  final int stock; // not shown to buyers
+  final String? costPrice; // cost price for margin calc — never shown to buyers
 
   const Product({
     required this.id,
@@ -39,10 +42,13 @@ class Product {
     this.weight,
     this.tags = const [],
     this.verified = false,
+    this.oldPrice,
+    this.stock = 1,
+    this.costPrice,
   });
 }
 
-const mockProducts = <Product>[
+final mockProducts = <Product>[
   Product(
     id: 'curved-vessel',
     name: 'Curved Vessel',
@@ -65,6 +71,7 @@ const mockProducts = <Product>[
     suite: 'Suite Mediterráneo',
     tags: ['Contemporary', 'Mediterranean', 'Handmade', 'Ceramic'],
     verified: true,
+    costPrice: '€180',
   ),
   Product(
     id: 'linen-armchair',
@@ -86,6 +93,7 @@ const mockProducts = <Product>[
     location: 'Madrid, ES',
     tags: ['Contemporary', 'Minimalist', 'Furniture'],
     verified: true,
+    costPrice: '€650',
   ),
   Product(
     id: 'bronze-table-lamp',
@@ -108,6 +116,7 @@ const mockProducts = <Product>[
     suite: 'Suite Verano',
     tags: ['Mid-century', 'Sculptural', 'Lighting'],
     verified: true,
+    costPrice: '€220',
   ),
   Product(
     id: 'walnut-side-table',
@@ -129,6 +138,7 @@ const mockProducts = <Product>[
     location: 'Girona, ES',
     tags: ['Minimalist', 'Nordic', 'Furniture'],
     verified: false,
+    costPrice: '€340',
   ),
   Product(
     id: 'stoneware-bowl',
@@ -151,6 +161,7 @@ const mockProducts = <Product>[
     edition: '5 / 20',
     tags: ['Contemporary', 'Handmade', 'Ceramic'],
     verified: true,
+    costPrice: '€60',
   ),
   Product(
     id: 'woven-throw',
@@ -172,6 +183,7 @@ const mockProducts = <Product>[
     location: 'Terrassa, ES',
     tags: ['Artisanal', 'Mediterranean', 'Textiles'],
     verified: true,
+    costPrice: '€110',
   ),
   Product(
     id: 'glass-pendant',
@@ -194,6 +206,7 @@ const mockProducts = <Product>[
     edition: 'AP 1 / 6',
     tags: ['Contemporary', 'Italian', 'Lighting'],
     verified: true,
+    costPrice: '€280',
   ),
   Product(
     id: 'ceramic-vase',
@@ -216,5 +229,6 @@ const mockProducts = <Product>[
     suite: 'Suite Andalucía',
     tags: ['Vintage', 'Mediterranean', 'Ceramic'],
     verified: false,
+    costPrice: '€90',
   ),
 ];
