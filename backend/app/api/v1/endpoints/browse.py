@@ -25,6 +25,7 @@ def browse_pieces(
     sort: str | None = None,
     min_price: int | None = None,
     max_price: int | None = None,
+    piece_type: str | None = None,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> list[BrowsePieceOut]:
@@ -35,6 +36,7 @@ def browse_pieces(
         sort=sort,
         min_price=min_price,
         max_price=max_price,
+        piece_type=piece_type,
         offset=offset,
         limit=limit,
     )

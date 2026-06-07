@@ -296,27 +296,37 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
     if (picked == null) return null;
 
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: picked.path,
-      aspectRatio: CropAspectRatio(ratioX: ratioX, ratioY: ratioY),
-      compressQuality: 80,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: ratioX == ratioY ? 'Crop avatar' : 'Crop banner',
-          toolbarColor: const Color(0xFF2E2520),
-          toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: AppColors.accent,
-          lockAspectRatio: true,
-        ),
-        IOSUiSettings(
-          title: ratioX == ratioY ? 'Crop avatar' : 'Crop banner',
-          aspectRatioLockEnabled: true,
-          resetAspectRatioEnabled: false,
-        ),
-      ],
-    );
-    if (cropped == null) return null;
-    return File(cropped.path).readAsBytes();
+    // image_cropper only works on Android/iOS/Web – skip on desktop
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      return File(picked.path).readAsBytes();
+    }
+
+    try {
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        aspectRatio: CropAspectRatio(ratioX: ratioX, ratioY: ratioY),
+        compressQuality: 80,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: ratioX == ratioY ? 'Crop avatar' : 'Crop banner',
+            toolbarColor: const Color(0xFF2E2520),
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: AppColors.accent,
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: ratioX == ratioY ? 'Crop avatar' : 'Crop banner',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
+        ],
+      );
+      if (cropped == null) return null;
+      return File(cropped.path).readAsBytes();
+    } catch (_) {
+      // Fallback: return raw image if cropper unavailable
+      return File(picked.path).readAsBytes();
+    }
   }
 
   // ── Colour-or-image chooser bottom sheet ───────────────────
@@ -327,15 +337,21 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       currentColor: _avatarColor,
       ratioX: 1,
       ratioY: 1,
-      onColor: (c) => setState(() {
-        _avatarType = 'color';
-        _avatarColor = c;
-        _avatarImageBytes = null;
-      }),
-      onImage: (bytes) => setState(() {
-        _avatarType = 'image';
-        _avatarImageBytes = bytes;
-      }),
+      onColor: (c) {
+        if (!mounted) return;
+        setState(() {
+          _avatarType = 'color';
+          _avatarColor = c;
+          _avatarImageBytes = null;
+        });
+      },
+      onImage: (bytes) {
+        if (!mounted) return;
+        setState(() {
+          _avatarType = 'image';
+          _avatarImageBytes = bytes;
+        });
+      },
     );
   }
 
@@ -345,15 +361,21 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       currentColor: _bannerColor,
       ratioX: 3,
       ratioY: 1,
-      onColor: (c) => setState(() {
-        _bannerType = 'color';
-        _bannerColor = c;
-        _bannerImageBytes = null;
-      }),
-      onImage: (bytes) => setState(() {
-        _bannerType = 'image';
-        _bannerImageBytes = bytes;
-      }),
+      onColor: (c) {
+        if (!mounted) return;
+        setState(() {
+          _bannerType = 'color';
+          _bannerColor = c;
+          _bannerImageBytes = null;
+        });
+      },
+      onImage: (bytes) {
+        if (!mounted) return;
+        setState(() {
+          _bannerType = 'image';
+          _bannerImageBytes = bytes;
+        });
+      },
     );
   }
 
@@ -402,11 +424,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               child: InkWell(
                 splashColor: AppColors.ink.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                onTap: () {
+                onTap: () async {
                   Navigator.of(context).pop();
-                  _pickAndCrop(ratioX: ratioX, ratioY: ratioY).then((bytes) {
-                    if (bytes != null) onImage(bytes);
-                  });
+                  // Wait for pop animation to complete before picking
+                  await Future.delayed(const Duration(milliseconds: 150));
+                  final bytes = await _pickAndCrop(ratioX: ratioX, ratioY: ratioY);
+                  if (bytes != null) onImage(bytes);
                 },
                 child: Padding(
                   padding:
@@ -526,8 +549,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 final selected = color == current;
                 return GestureDetector(
                   onTap: () {
-                    onPick(color);
                     Navigator.of(context).pop();
+                    onPick(color);
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
@@ -609,8 +632,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                       child: InkWell(
                         splashColor: AppColors.ink.withValues(alpha: 0.05),
                         onTap: () {
-                          setState(() => _discipline = d);
                           Navigator.of(context).pop();
+                          setState(() => _discipline = d);
                         },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(

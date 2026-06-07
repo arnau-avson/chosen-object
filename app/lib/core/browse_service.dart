@@ -169,6 +169,7 @@ class BrowseService extends ChangeNotifier {
     String? sort,
     int? minPrice,
     int? maxPrice,
+    String? pieceType,
     int offset = 0,
     int limit = 20,
   }) async {
@@ -182,6 +183,7 @@ class BrowseService extends ChangeNotifier {
       if (sort != null) params['sort'] = sort;
       if (minPrice != null) params['min_price'] = minPrice.toString();
       if (maxPrice != null) params['max_price'] = maxPrice.toString();
+      if (pieceType != null) params['piece_type'] = pieceType;
       params['offset'] = offset.toString();
       params['limit'] = limit.toString();
 

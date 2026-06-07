@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/browse_service.dart';
+import '../../core/follow_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/shared_app_bar.dart';
@@ -54,6 +55,12 @@ class _StudiosScreenState extends State<StudiosScreen>
   Future<void> _fetchStudios() async {
     await BrowseService.instance.fetchUsers();
     if (!mounted) return;
+    // Seed follow state from API response
+    for (final u in BrowseService.instance.users) {
+      if (u.isFollowing) {
+        FollowService.instance.markFollowing(u.id);
+      }
+    }
     setState(() => _initialLoading = false);
     _anim.forward();
   }
@@ -220,17 +227,17 @@ class _StudioGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: users.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 14,
-          mainAxisSpacing: 24,
-          childAspectRatio: 0.58,
-        ),
-        itemBuilder: (_, i) => _StudioCard(user: users[i]),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 24,
+        children: users.map((u) {
+          final cardWidth =
+              (MediaQuery.of(context).size.width - 16 * 2 - 14) / 2;
+          return SizedBox(
+            width: cardWidth,
+            child: _StudioCard(user: u),
+          );
+        }).toList(),
       ),
     );
   }
@@ -238,22 +245,15 @@ class _StudioGrid extends StatelessWidget {
 
 // ── Studio card ───────────────────────────────────────────────
 
-class _StudioCard extends StatefulWidget {
+class _StudioCard extends StatelessWidget {
   final BrowseUser user;
   const _StudioCard({required this.user});
 
-  @override
-  State<_StudioCard> createState() => _StudioCardState();
-}
-
-class _StudioCardState extends State<_StudioCard> {
-  bool _saved = false;
-
-  void _openProfile() {
+  void _openProfile(BuildContext context) {
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, _, _) =>
-            UserProfileScreen(userId: widget.user.id.toString()),
+            UserProfileScreen(userId: user.id.toString()),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 300),
@@ -263,7 +263,7 @@ class _StudioCardState extends State<_StudioCard> {
 
   @override
   Widget build(BuildContext context) {
-    final u = widget.user;
+    final u = user;
     final displayName = u.studioName ?? u.username;
     final locationParts = <String>[
       if (u.city != null) u.city!,
@@ -278,10 +278,11 @@ class _StudioCardState extends State<_StudioCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Image / avatar area ──
-        Expanded(
+        // ── Image / avatar area (fixed aspect ratio) ──
+        AspectRatio(
+          aspectRatio: 0.75,
           child: GestureDetector(
-            onTap: _openProfile,
+            onTap: () => _openProfile(context),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: u.avatarImageB64 != null
@@ -306,30 +307,22 @@ class _StudioCardState extends State<_StudioCard> {
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: _openProfile,
+                onTap: () => _openProfile(context),
                 behavior: HitTestBehavior.opaque,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Name
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.inkStrong,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.inkStrong,
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    // Location / discipline
                     if (description.isNotEmpty)
                       Text(
                         description,
@@ -342,7 +335,6 @@ class _StudioCardState extends State<_StudioCard> {
                         ),
                       ),
                     const SizedBox(height: 4),
-                    // Stats
                     Text(
                       stats,
                       style: GoogleFonts.inter(
@@ -355,24 +347,30 @@ class _StudioCardState extends State<_StudioCard> {
                 ),
               ),
             ),
-            GestureDetector(
-              onTap: () => setState(() => _saved = !_saved),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 4, top: 1),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (child, anim) =>
-                      ScaleTransition(scale: anim, child: child),
-                  child: Icon(
-                    _saved
-                        ? Icons.bookmark_rounded
-                        : Icons.bookmark_border_rounded,
-                    key: ValueKey(_saved),
-                    size: 18,
-                    color: _saved ? AppColors.accent : AppColors.muted,
+            ListenableBuilder(
+              listenable: FollowService.instance,
+              builder: (context, _) {
+                final saved = FollowService.instance.isFollowing(u.id);
+                return GestureDetector(
+                  onTap: () => FollowService.instance.toggleFollow(u.id),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 4, top: 1),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: Icon(
+                        saved
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        key: ValueKey(saved),
+                        size: 18,
+                        color: saved ? AppColors.accent : AppColors.muted,
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ],
         ),

@@ -1,6 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
+import '../core/cart_service.dart';
+import '../core/message_service.dart';
+import '../core/notification_service.dart';
 import '../screens/collection/collection_screen.dart';
 import '../screens/home/home_screen.dart';
 
@@ -44,6 +49,11 @@ class _SharedAppBarState extends State<SharedAppBar>
       begin: const Offset(0.06, 0),
       end: Offset.zero,
     ).animate(curve);
+
+    // Fetch badge counts
+    NotificationService.instance.fetchUnreadCount();
+    MessageService.instance.fetchUnreadCount();
+    CartService.instance.fetchCart();
   }
 
   @override
@@ -52,14 +62,6 @@ class _SharedAppBarState extends State<SharedAppBar>
     _searchFocusNode.dispose();
     _searchAnim.dispose();
     super.dispose();
-  }
-
-  void _openSearch() {
-    setState(() => _searchActive = true);
-    _searchAnim.forward();
-    Future.delayed(const Duration(milliseconds: 80), () {
-      if (mounted) _searchFocusNode.requestFocus();
-    });
   }
 
   void _closeSearch() {
@@ -90,6 +92,16 @@ class _SharedAppBarState extends State<SharedAppBar>
     );
   }
 
+  void _showCartModal(BuildContext context) {
+    CartService.instance.fetchCart();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => const _CartModal(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppBar(
@@ -113,7 +125,32 @@ class _SharedAppBarState extends State<SharedAppBar>
               },
               tooltip: 'Back',
             )
-          : null,
+          : ListenableBuilder(
+              listenable: Listenable.merge([
+                MessageService.instance,
+                NotificationService.instance,
+                CartService.instance,
+              ]),
+              builder: (context, _) {
+                final total = MessageService.instance.unreadCount +
+                    NotificationService.instance.unreadCount +
+                    CartService.instance.itemCount;
+                return IconButton(
+                  icon: Badge(
+                    isLabelVisible: total > 0,
+                    label: Text(
+                      total.toString(),
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                    backgroundColor: const Color(0xFFCC3333),
+                    child: const Icon(Icons.menu_rounded, size: 22),
+                  ),
+                  color: AppColors.inkSoft,
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  tooltip: 'Menu',
+                );
+              },
+            ),
       titleSpacing: 0,
       title: Padding(
         padding: const EdgeInsets.only(right: 4),
@@ -204,11 +241,26 @@ class _SharedAppBarState extends State<SharedAppBar>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (!widget.hideSearchIcon)
-                        IconButton(
-                          icon: const Icon(Icons.search_outlined, size: 21),
-                          tooltip: 'Search',
-                          color: AppColors.inkSoft,
-                          onPressed: _openSearch,
+                        ListenableBuilder(
+                          listenable: CartService.instance,
+                          builder: (context, _) {
+                            final count = CartService.instance.itemCount;
+                            return IconButton(
+                              icon: Badge(
+                                isLabelVisible: count > 0,
+                                label: Text(
+                                  count.toString(),
+                                  style: const TextStyle(fontSize: 9),
+                                ),
+                                backgroundColor: AppColors.accent,
+                                child: const Icon(
+                                    Icons.shopping_bag_outlined, size: 21),
+                              ),
+                              tooltip: 'Cart',
+                              color: AppColors.inkSoft,
+                              onPressed: () => _showCartModal(context),
+                            );
+                          },
                         ),
                       IconButton(
                         icon: const Icon(
@@ -328,6 +380,308 @@ class _NotificationsModal extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Cart modal ─────────────────────────────────────────────────
+
+class _CartModal extends StatelessWidget {
+  const _CartModal();
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65,
+      minChildSize: 0.35,
+      maxChildSize: 0.85,
+      builder: (_, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: ListenableBuilder(
+            listenable: CartService.instance,
+            builder: (context, _) {
+              final cart = CartService.instance;
+              final items = cart.items;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Handle ──
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 6),
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.hairline,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+
+                  // ── Header ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 14, 0),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Cart',
+                          style: GoogleFonts.fraunces(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.inkStrong,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (items.isNotEmpty)
+                          Text(
+                            '${items.length} item${items.length == 1 ? '' : 's'}',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          color: AppColors.muted,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child:
+                        Divider(color: AppColors.hairline, height: 20),
+                  ),
+
+                  // ── Content ──
+                  if (cart.loading)
+                    const Expanded(
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: AppColors.accent,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (items.isEmpty)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.shopping_bag_outlined,
+                              size: 36,
+                              color: AppColors.hairline2,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Your cart is empty',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: AppColors.muted,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Browse pieces and add them\nto your cart',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: AppColors.muted2,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else ...[
+                    // ── Items list ──
+                    Expanded(
+                      child: ListView.separated(
+                        controller: scrollController,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: items.length,
+                        separatorBuilder: (_, _) => const Divider(
+                            color: AppColors.hairline, height: 1),
+                        itemBuilder: (_, i) {
+                          final item = items[i];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 14),
+                            child: Row(
+                              children: [
+                                // Thumbnail
+                                ClipRRect(
+                                  borderRadius:
+                                      BorderRadius.circular(6),
+                                  child: Container(
+                                    width: 56,
+                                    height: 56,
+                                    color: AppColors.hairline2,
+                                    child: item.coverImageB64 != null
+                                        ? Image.memory(
+                                            base64Decode(
+                                                item.coverImageB64!),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : const Center(
+                                            child: Icon(
+                                              Icons.image_outlined,
+                                              size: 20,
+                                              color: AppColors.muted,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+
+                                // Info
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.title,
+                                        maxLines: 1,
+                                        overflow:
+                                            TextOverflow.ellipsis,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.inkStrong,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        item.priceFormatted,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.inkSoft,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+
+                                // Remove
+                                GestureDetector(
+                                  onTap: () => CartService.instance
+                                      .removeFromCart(item.pieceId),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(6),
+                                    child: Icon(
+                                      Icons.close_rounded,
+                                      size: 16,
+                                      color: AppColors.muted,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    // ── Footer: total + checkout ──
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                              color: AppColors.hairline, width: 1),
+                        ),
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Total',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.inkStrong,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  cart.totalFormatted,
+                                  style: GoogleFonts.fraunces(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w400,
+                                    color: AppColors.inkStrong,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Checkout coming soon'),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: AppColors.ink,
+                                  borderRadius:
+                                      BorderRadius.circular(4),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Proceed to checkout',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.bone,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

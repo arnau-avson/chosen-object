@@ -18,6 +18,7 @@ class BrowseService:
         sort: str | None = None,
         min_price: int | None = None,
         max_price: int | None = None,
+        piece_type: str | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[BrowsePieceOut]:
@@ -27,6 +28,7 @@ class BrowseService:
             sort=sort,
             min_price=min_price,
             max_price=max_price,
+            piece_type=piece_type,
             offset=offset,
             limit=limit,
         )

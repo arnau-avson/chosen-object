@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_colors.dart';
 import '../../core/browse_service.dart';
 import '../../widgets/app_drawer.dart';
@@ -34,6 +35,12 @@ class _SearchScreenState extends State<SearchScreen>
   bool _loadingPieces = false;
   bool _loadingUsers = false;
 
+  // ── Recent users ──
+  List<BrowseUser> _recentUsers = [];
+  static const _recentUsersKey = 'recent_searched_users';
+
+  bool get _hasQuery => _searchController.text.trim().isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -41,23 +48,101 @@ class _SearchScreenState extends State<SearchScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _loadRecentUsers();
     _searchPieces();
-    _searchUsers();
+    BrowseService.instance.addListener(_onBrowseChanged);
   }
 
   @override
   void dispose() {
+    BrowseService.instance.removeListener(_onBrowseChanged);
     _anim.dispose();
     _searchController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
+  void _onBrowseChanged() {
+    if (mounted && !_showUsers) {
+      setState(() {
+        _pieces = BrowseService.instance.pieces;
+      });
+    }
+  }
+
+  // ── Recent users persistence ──────────────────────────────
+
+  Future<void> _loadRecentUsers() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = prefs.getStringList(_recentUsersKey);
+    if (jsonList != null && jsonList.isNotEmpty) {
+      setState(() {
+        _recentUsers = jsonList
+            .map((s) => BrowseUser.fromJson(
+                jsonDecode(s) as Map<String, dynamic>))
+            .toList();
+      });
+    }
+  }
+
+  Future<void> _saveRecentUsers() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = _recentUsers
+        .map((u) => jsonEncode(_browseUserToJson(u)))
+        .toList();
+    await prefs.setStringList(_recentUsersKey, jsonList);
+  }
+
+  Map<String, dynamic> _browseUserToJson(BrowseUser u) => {
+        'id': u.id,
+        'username': u.username,
+        'studio_name': u.studioName,
+        'discipline': u.discipline,
+        'city': u.city,
+        'country': u.country,
+        'bio': u.bio,
+        'avatar_type': u.avatarType,
+        'avatar_color': u.avatarColor,
+        'avatar_image_b64': u.avatarImageB64,
+        'banner_type': u.bannerType,
+        'banner_color': u.bannerColor,
+        'banner_image_b64': u.bannerImageB64,
+        'is_following': u.isFollowing,
+        'followers_count': u.followersCount,
+        'following_count': u.followingCount,
+        'pieces_count': u.piecesCount,
+      };
+
+  void _addToRecent(BrowseUser user) {
+    setState(() {
+      _recentUsers.removeWhere((u) => u.id == user.id);
+      _recentUsers.insert(0, user);
+      // Keep max 20 recent users
+      if (_recentUsers.length > 20) {
+        _recentUsers = _recentUsers.sublist(0, 20);
+      }
+    });
+    _saveRecentUsers();
+  }
+
+  void _removeFromRecent(int userId) {
+    setState(() {
+      _recentUsers.removeWhere((u) => u.id == userId);
+    });
+    _saveRecentUsers();
+  }
+
+  // ── Search logic ──────────────────────────────────────────
+
   void _onSearchChanged(String _) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {
       _searchPieces();
-      _searchUsers();
+      if (_hasQuery) {
+        _searchUsers();
+      } else {
+        setState(() => _users = []);
+      }
     });
   }
 
@@ -103,6 +188,19 @@ class _SearchScreenState extends State<SearchScreen>
               curve: Curves.easeOut),
         ),
       );
+
+  void _navigateToUser(BrowseUser user) {
+    _addToRecent(user);
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) =>
+            UserProfileScreen(userId: user.id.toString()),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -267,12 +365,7 @@ class _SearchScreenState extends State<SearchScreen>
           // ── List content ──
           SliverToBoxAdapter(
             child: _showUsers
-                ? (_loadingUsers
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 64),
-                        child: Center(child: LoadingSpinner()),
-                      )
-                    : _UsersListBox(users: _users))
+                ? _buildUsersContent()
                 : (_loadingPieces
                     ? const Padding(
                         padding: EdgeInsets.symmetric(vertical: 64),
@@ -284,6 +377,50 @@ class _SearchScreenState extends State<SearchScreen>
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
+    );
+  }
+
+  Widget _buildUsersContent() {
+    // If there's an active search query, show API results
+    if (_hasQuery) {
+      if (_loadingUsers) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 64),
+          child: Center(child: LoadingSpinner()),
+        );
+      }
+      return _UsersListBox(
+        users: _users,
+        onUserTap: _navigateToUser,
+      );
+    }
+
+    // No query → show recent users
+    if (_recentUsers.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 64),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.history_rounded,
+                size: 36, color: AppColors.hairline2),
+            const SizedBox(height: 12),
+            Text('No recent searches',
+                style:
+                    GoogleFonts.inter(fontSize: 14, color: AppColors.muted)),
+            const SizedBox(height: 4),
+            Text('Users you visit will appear here',
+                style:
+                    GoogleFonts.inter(fontSize: 12.5, color: AppColors.muted)),
+          ],
+        ),
+      );
+    }
+
+    return _RecentUsersListBox(
+      users: _recentUsers,
+      onUserTap: _navigateToUser,
+      onRemove: _removeFromRecent,
     );
   }
 }
@@ -416,11 +553,181 @@ class _ProductsGridBoxState extends State<_ProductsGridBox>
   }
 }
 
-// ── Users list box ───────────────────────────────────────────
+// ── Recent users list (with X button) ────────────────────────
+
+class _RecentUsersListBox extends StatelessWidget {
+  final List<BrowseUser> users;
+  final void Function(BrowseUser) onUserTap;
+  final void Function(int userId) onRemove;
+
+  const _RecentUsersListBox({
+    required this.users,
+    required this.onUserTap,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Recent',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.muted,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          ...List.generate(users.length * 2 - 1, (index) {
+            if (index.isOdd) {
+              return const Divider(
+                  color: AppColors.hairline, height: 1, thickness: 1);
+            }
+            final i = index ~/ 2;
+            return _RecentUserRow(
+              user: users[i],
+              onTap: () => onUserTap(users[i]),
+              onRemove: () => onRemove(users[i].id),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Recent user row (with X) ─────────────────────────────────
+
+class _RecentUserRow extends StatelessWidget {
+  final BrowseUser user;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  const _RecentUserRow({
+    required this.user,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = user.studioName != null
+        ? user.studioName!.split(' ').map((w) => w[0]).take(2).join()
+        : user.username
+            .split(' ')
+            .map((w) => w[0])
+            .take(2)
+            .join()
+            .toUpperCase();
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            // ── Avatar ──
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: _parseColor(user.avatarColor),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: user.avatarType == 'image' && user.avatarImageB64 != null
+                  ? ClipOval(
+                      child: Image.memory(
+                        base64Decode(user.avatarImageB64!),
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Text(
+                      initials,
+                      style: GoogleFonts.fraunces(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 12),
+
+            // ── Info ──
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.studioName ?? user.username,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.fraunces(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.inkStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '@${user.username}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Remove button ──
+            GestureDetector(
+              onTap: onRemove,
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: AppColors.muted,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _parseColor(String hex) {
+    final cleaned = hex.replaceFirst('#', '');
+    return Color(int.parse('FF$cleaned', radix: 16));
+  }
+}
+
+// ── Users list box (search results) ──────────────────────────
 
 class _UsersListBox extends StatefulWidget {
   final List<BrowseUser> users;
-  const _UsersListBox({required this.users});
+  final void Function(BrowseUser) onUserTap;
+
+  const _UsersListBox({
+    required this.users,
+    required this.onUserTap,
+  });
 
   @override
   State<_UsersListBox> createState() => _UsersListBoxState();
@@ -487,7 +794,10 @@ class _UsersListBoxState extends State<_UsersListBox>
                 begin: const Offset(0, 0.15),
                 end: Offset.zero,
               ).animate(curve),
-              child: _UserRow(user: users[i]),
+              child: _UserRow(
+                user: users[i],
+                onTap: () => widget.onUserTap(users[i]),
+              ),
             ),
           );
         }),
@@ -512,9 +822,9 @@ class _ProductCardState extends State<_ProductCard> {
   void _openDetail() {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) =>
+        pageBuilder: (_, __, ___) =>
             ProductDetailScreen(pieceId: widget.piece.id),
-        transitionsBuilder: (_, animation, _, child) =>
+        transitionsBuilder: (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 300),
       ),
@@ -575,7 +885,7 @@ class _ProductCardState extends State<_ProductCard> {
                     Container(
                       color: AppColors.hairline,
                       alignment: Alignment.center,
-                      child: Icon(Icons.image_outlined,
+                      child: const Icon(Icons.image_outlined,
                           size: 32, color: AppColors.muted),
                     ),
                   Positioned(
@@ -710,32 +1020,28 @@ class _ProductCardState extends State<_ProductCard> {
   }
 }
 
-// ── User row ──────────────────────────────────────────────────
+// ── User row (search results) ────────────────────────────────
 
 class _UserRow extends StatelessWidget {
   final BrowseUser user;
+  final VoidCallback onTap;
 
-  const _UserRow({required this.user});
+  const _UserRow({required this.user, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final initials = user.studioName != null
         ? user.studioName!.split(' ').map((w) => w[0]).take(2).join()
-        : user.username.split(' ').map((w) => w[0]).take(2).join().toUpperCase();
+        : user.username
+            .split(' ')
+            .map((w) => w[0])
+            .take(2)
+            .join()
+            .toUpperCase();
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        Navigator.of(context).push(
-          PageRouteBuilder(
-            pageBuilder: (_, _, _) =>
-                UserProfileScreen(userId: user.id.toString()),
-            transitionsBuilder: (_, animation, _, child) =>
-                FadeTransition(opacity: animation, child: child),
-            transitionDuration: const Duration(milliseconds: 300),
-          ),
-        );
-      },
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Row(
@@ -888,9 +1194,22 @@ class _FiltersModalState extends State<_FiltersModal> {
         break;
     }
 
+    // Type filter: 0=All, 1=Buy, 2=Rent, 3=Buy or Rent (both)
+    String? pieceType;
+    switch (_selectedType) {
+      case 1:
+        pieceType = 'buy';
+        break;
+      case 2:
+        pieceType = 'rent';
+        break;
+      // 0 (All) and 3 (Buy or Rent) don't filter
+    }
+
     BrowseService.instance.fetchPieces(
       discipline: discipline,
       sort: sort,
+      pieceType: pieceType,
       minPrice: _priceRange.start.round() * 100,
       maxPrice: _priceRange.end.round() * 100,
     );

@@ -18,6 +18,7 @@ class BrowseRepository:
         sort: str | None = None,
         min_price: int | None = None,
         max_price: int | None = None,
+        piece_type: str | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[Piece]:
@@ -35,6 +36,10 @@ class BrowseRepository:
             q = q.filter(Piece.price_cents >= min_price)
         if max_price is not None:
             q = q.filter(Piece.price_cents <= max_price)
+        if piece_type == "buy":
+            q = q.filter(Piece.rental == False)
+        elif piece_type == "rent":
+            q = q.filter(Piece.rental == True)
 
         if sort == "price_asc":
             q = q.order_by(Piece.price_cents.asc())

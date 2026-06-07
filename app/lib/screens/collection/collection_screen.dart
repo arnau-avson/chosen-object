@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/collection_service.dart';
+import '../../core/follow_service.dart';
+import '../../core/profile_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/save_to_collection_modal.dart';
 import '../../widgets/shared_app_bar.dart';
+import '../profile/user_profile_screen.dart';
 
 // ═════════════════════════════════════════════════════════════
 // ── Collection Screen ───────────────────────────────────────
@@ -24,8 +27,10 @@ class _CollectionScreenState extends State<CollectionScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
 
-  // 0 = Pieces, 1 = Collections
+  // 0 = Pieces, 1 = Collections, 2 = Studios
   int _tabIndex = 0;
+  List<FollowUser> _followingUsers = [];
+  bool _loadingStudios = false;
 
   // ── Animation helpers ──────────────────────────────────────
 
@@ -54,6 +59,23 @@ class _CollectionScreenState extends State<CollectionScreen>
     // Fetch data from API
     CollectionService.instance.fetchSavedPieces();
     CollectionService.instance.fetchCollections();
+    _fetchFollowingUsers();
+  }
+
+  Future<void> _fetchFollowingUsers() async {
+    setState(() => _loadingStudios = true);
+    final myId = ProfileService.instance.userId;
+    if (myId > 0) {
+      final users = await FollowService.instance.getFollowing(myId);
+      if (mounted) {
+        setState(() {
+          _followingUsers = users;
+          _loadingStudios = false;
+        });
+      }
+    } else {
+      if (mounted) setState(() => _loadingStudios = false);
+    }
   }
 
   @override
@@ -254,6 +276,12 @@ class _CollectionScreenState extends State<CollectionScreen>
                             active: _tabIndex == 1,
                             onTap: () => setState(() => _tabIndex = 1),
                           ),
+                          const SizedBox(width: 28),
+                          _TabLabel(
+                            label: 'Studios',
+                            active: _tabIndex == 2,
+                            onTap: () => setState(() => _tabIndex = 2),
+                          ),
                         ],
                       ),
                     ),
@@ -272,14 +300,22 @@ class _CollectionScreenState extends State<CollectionScreen>
                           fade: _fade,
                           slide: _slide,
                         )
-                      : _CollectionsTab(
-                          key: const ValueKey('collections'),
-                          collections: collections,
-                          onOpenCollection: _openCollection,
-                          onCreateCollection: _showCreateDialog,
-                          fade: _fade,
-                          slide: _slide,
-                        ),
+                      : _tabIndex == 1
+                          ? _CollectionsTab(
+                              key: const ValueKey('collections'),
+                              collections: collections,
+                              onOpenCollection: _openCollection,
+                              onCreateCollection: _showCreateDialog,
+                              fade: _fade,
+                              slide: _slide,
+                            )
+                          : _StudiosTab(
+                              key: const ValueKey('studios'),
+                              users: _followingUsers,
+                              loading: _loadingStudios,
+                              fade: _fade,
+                              slide: _slide,
+                            ),
                 ),
               ],
             ),
@@ -517,6 +553,234 @@ class _CollectionsTab extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Studios tab (saved/followed studios) ────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _StudiosTab extends StatelessWidget {
+  final List<FollowUser> users;
+  final bool loading;
+  final Animation<double> Function(double, double) fade;
+  final Animation<Offset> Function(double, double) slide;
+
+  const _StudiosTab({
+    super.key,
+    required this.users,
+    required this.loading,
+    required this.fade,
+    required this.slide,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(child: LoadingSpinner()),
+      );
+    }
+
+    if (users.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 48),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.storefront_outlined,
+                  size: 36, color: AppColors.hairline2),
+              const SizedBox(height: 12),
+              Text(
+                'No saved studios yet',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.muted,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Follow studios to see them here',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.muted2,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return FadeTransition(
+      opacity: fade(0.12, 0.55),
+      child: SlideTransition(
+        position: slide(0.12, 0.55),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: users
+                .map((user) => _SavedStudioRow(user: user))
+                .toList(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Saved studio row ────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _SavedStudioRow extends StatelessWidget {
+  final FollowUser user;
+  const _SavedStudioRow({required this.user});
+
+  Color _parseColor(String hex) {
+    final cleaned = hex.replaceFirst('#', '');
+    final value = int.tryParse(cleaned, radix: 16) ?? 0x2E2520;
+    return Color(0xFF000000 | value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = user.studioName ?? user.username;
+    final initials = displayName
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0])
+        .take(2)
+        .join();
+    final avatarColor = _parseColor(user.avatarColor);
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          PageRouteBuilder(
+            pageBuilder: (_, _, _) =>
+                UserProfileScreen(userId: user.id.toString()),
+            transitionsBuilder: (_, animation, _, child) =>
+                FadeTransition(opacity: animation, child: child),
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        );
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          children: [
+            // Avatar
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: avatarColor,
+              ),
+              alignment: Alignment.center,
+              child: user.avatarImageB64 != null
+                  ? ClipOval(
+                      child: Image.memory(
+                        base64Decode(user.avatarImageB64!),
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Text(
+                      initials,
+                      style: GoogleFonts.fraunces(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 14),
+
+            // Name + info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      '@${user.username}',
+                      if (user.discipline != null) user.discipline!,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Unfollow button
+            ListenableBuilder(
+              listenable: FollowService.instance,
+              builder: (context, _) {
+                final following =
+                    FollowService.instance.isFollowing(user.id);
+                return GestureDetector(
+                  onTap: () =>
+                      FollowService.instance.toggleFollow(user.id),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: following
+                          ? Colors.transparent
+                          : AppColors.ink,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: following
+                            ? AppColors.hairline
+                            : AppColors.ink,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      following ? 'Following' : 'Follow',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: following
+                            ? AppColors.inkSoft
+                            : AppColors.bone,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

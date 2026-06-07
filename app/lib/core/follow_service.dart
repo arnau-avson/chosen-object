@@ -57,6 +57,11 @@ class FollowService extends ChangeNotifier {
 
   bool isFollowing(int userId) => _followingIds.contains(userId);
 
+  /// Seed the local cache (e.g. from browse API response).
+  void markFollowing(int userId) {
+    _followingIds.add(userId);
+  }
+
   /// Fetch follow counts for a user.
   Future<Map<String, int>> fetchCounts(int userId) async {
     try {

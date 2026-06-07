@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
 import '../core/auth_service.dart';
+import '../core/cart_service.dart';
+import '../core/message_service.dart';
+import '../core/notification_service.dart';
 import '../core/profile_service.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/home/home_screen.dart';
@@ -20,7 +23,6 @@ import '../screens/settings/settings_screen.dart';
 import '../screens/list_piece/list_piece_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/rental_calendar/rental_calendar_screen.dart';
-import '../core/notification_service.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -37,39 +39,46 @@ class _AppDrawerState extends State<AppDrawer>
 
   // ── Secciones ──────────────────────────────────────────────
 
-  static final _sections = [
-    _Section('Discover', [
-      _Item('Home',            Icons.home_outlined,                 '/home'),
-      _Item('Search',          Icons.search_outlined,               '/search'),
-      _Item('Map',             Icons.map_outlined,                  '/map'),
-      _Item('Studios',         Icons.storefront_outlined,           '/studios'),
-    ]),
-    _Section('Activity', [
-      _Item('Collection',      Icons.bookmark_border_rounded,       '/collection',    badge: 0),
-      _Item('Messages',        Icons.chat_bubble_outline_rounded,   '/messages',      badge: 2),
-      _Item('Orders',          Icons.receipt_long_outlined,         '/orders'),
-      _Item('Notifications',   Icons.notifications_none_rounded,    '/notifications', badge: NotificationService.instance.unreadCount),
-    ]),
-    _Section('Account', [
-      _Item('Profile',         Icons.person_outline_rounded,        '/profile'),
-      _Item('Settings',        Icons.tune_rounded,                  '/settings'),
-      _Item('Addresses',       Icons.location_on_outlined,          '/addresses'),
-      _Item('Payments',        Icons.credit_card_outlined,          '/payments'),
-      _Item('Help',            Icons.help_outline_rounded,          '/help'),
-    ]),
-    _Section('Sell', [
-      _Item('List a piece',    Icons.add_photo_alternate_outlined,  '/list'),
-      _Item('Dashboard',       Icons.bar_chart_rounded,             '/dashboard'),
-      _Item('Rental calendar', Icons.calendar_today_outlined,       '/rental-calendar'),
-    ]),
-    _Section('Editorial', [
-      _Item('Get the look',    Icons.auto_awesome_outlined,         '/get-the-look'),
-      _Item('Themed week',     Icons.auto_stories_outlined,         '/themed-week'),
-    ]),
-    _Section('Trust console', [
-      _Item('Admin console',   Icons.admin_panel_settings_outlined, '/admin'),
-    ]),
-  ];
+  List<_Section> _buildSections() {
+    final msgCount = MessageService.instance.unreadCount;
+    final notifCount = NotificationService.instance.unreadCount;
+    final cartCount = CartService.instance.itemCount;
+
+    return [
+      _Section('Discover', [
+        _Item('Home',            Icons.home_outlined,                 '/home'),
+        _Item('Search',          Icons.search_outlined,               '/search'),
+        _Item('Map',             Icons.map_outlined,                  '/map'),
+        _Item('Studios',         Icons.storefront_outlined,           '/studios'),
+      ]),
+      _Section('Activity', [
+        _Item('Collection',      Icons.bookmark_border_rounded,       '/collection'),
+        _Item('Messages',        Icons.chat_bubble_outline_rounded,   '/messages',      badge: msgCount),
+        _Item('Orders',          Icons.receipt_long_outlined,         '/orders',        badge: cartCount),
+        _Item('Notifications',   Icons.notifications_none_rounded,    '/notifications', badge: notifCount),
+      ]),
+      _Section('Account', [
+        _Item('Profile',         Icons.person_outline_rounded,        '/profile'),
+        _Item('Settings',        Icons.tune_rounded,                  '/settings'),
+        _Item('Addresses',       Icons.location_on_outlined,          '/addresses'),
+        _Item('Payments',        Icons.credit_card_outlined,          '/payments'),
+        _Item('Help',            Icons.help_outline_rounded,          '/help'),
+      ]),
+      _Section('Sell', [
+        _Item('List a piece',    Icons.add_photo_alternate_outlined,  '/list'),
+        _Item('Dashboard',       Icons.bar_chart_rounded,             '/dashboard'),
+        _Item('Rental calendar', Icons.calendar_today_outlined,       '/rental-calendar'),
+      ]),
+      _Section('Editorial', [
+        _Item('Get the look',    Icons.auto_awesome_outlined,         '/get-the-look'),
+        _Item('Themed week',     Icons.auto_stories_outlined,         '/themed-week'),
+      ]),
+      _Section('Trust console', [
+        _Item('Admin console',   Icons.admin_panel_settings_outlined, '/admin'),
+      ]),
+    ];
+  }
+
 
   // ── Animation helpers ───────────────────────────────────────
 
@@ -127,20 +136,30 @@ class _AppDrawerState extends State<AppDrawer>
 
           // Lista de secciones
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 6, bottom: 16),
-              itemCount: _sections.length,
-              itemBuilder: (_, i) {
-                final start = 0.08 + i * 0.09;
-                return FadeTransition(
-                  opacity: _fade(start, start + 0.35),
-                  child: SlideTransition(
-                    position: _slide(start, start + 0.38),
-                    child: _SectionWidget(
-                      section: _sections[i],
-                      currentRoute: widget.currentRoute,
-                    ),
-                  ),
+            child: ListenableBuilder(
+              listenable: Listenable.merge([
+                MessageService.instance,
+                NotificationService.instance,
+                CartService.instance,
+              ]),
+              builder: (context, _) {
+                final sections = _buildSections();
+                return ListView.builder(
+                  padding: const EdgeInsets.only(top: 6, bottom: 16),
+                  itemCount: sections.length,
+                  itemBuilder: (_, i) {
+                    final start = 0.08 + i * 0.09;
+                    return FadeTransition(
+                      opacity: _fade(start, start + 0.35),
+                      child: SlideTransition(
+                        position: _slide(start, start + 0.38),
+                        child: _SectionWidget(
+                          section: sections[i],
+                          currentRoute: widget.currentRoute,
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -460,11 +479,11 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = count > 0;
+    if (count <= 0) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: active ? AppColors.accent : AppColors.hairline,
+        color: AppColors.accent,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -472,7 +491,7 @@ class _Badge extends StatelessWidget {
         style: GoogleFonts.inter(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: active ? AppColors.bone : AppColors.muted,
+          color: AppColors.bone,
         ),
       ),
     );

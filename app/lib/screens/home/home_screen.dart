@@ -95,6 +95,43 @@ class _HomeScreenState extends State<HomeScreen>
             return const Center(child: LoadingSpinner());
           }
 
+          if (pieces.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.storefront_outlined,
+                      size: 48,
+                      color: AppColors.muted,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No pieces available',
+                      style: GoogleFonts.fraunces(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.inkStrong,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'There are no pieces listed yet. Check back later or explore studios.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 13.5,
+                        color: AppColors.muted,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           return SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
