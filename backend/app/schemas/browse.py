@@ -29,6 +29,8 @@ class BrowsePieceOut(BaseModel):
     is_saved: bool = False
     seller_username: str | None = None
     seller_studio_name: str | None = None
+    seller_city: str | None = None
+    seller_country: str | None = None
 
     @classmethod
     def from_model(
@@ -67,6 +69,8 @@ class BrowsePieceOut(BaseModel):
             is_saved=is_saved,
             seller_username=seller.username if seller else None,
             seller_studio_name=seller.studio_name if seller else None,
+            seller_city=seller.city if seller else None,
+            seller_country=seller.country if seller else None,
         )
 
 
@@ -121,6 +125,8 @@ class BrowsePieceDetailOut(BrowsePieceOut):
             is_saved=is_saved,
             seller_username=seller.username if seller else None,
             seller_studio_name=seller.studio_name if seller else None,
+            seller_city=seller.city if seller else None,
+            seller_country=seller.country if seller else None,
             images=images_list,
         )
 

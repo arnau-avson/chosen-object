@@ -27,6 +27,8 @@ class BrowsePiece {
   final bool isSaved;
   final String? sellerUsername;
   final String? sellerStudioName;
+  final String? sellerCity;
+  final String? sellerCountry;
   final List<Map<String, dynamic>>? images;
 
   BrowsePiece({
@@ -50,6 +52,8 @@ class BrowsePiece {
     this.isSaved = false,
     this.sellerUsername,
     this.sellerStudioName,
+    this.sellerCity,
+    this.sellerCountry,
     this.images,
   });
 
@@ -76,6 +80,8 @@ class BrowsePiece {
         isSaved: j['is_saved'] as bool? ?? false,
         sellerUsername: j['seller_username'] as String?,
         sellerStudioName: j['seller_studio_name'] as String?,
+        sellerCity: j['seller_city'] as String?,
+        sellerCountry: j['seller_country'] as String?,
         images: (j['images'] as List?)
             ?.map((e) => e as Map<String, dynamic>)
             .toList(),

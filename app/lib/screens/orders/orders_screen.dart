@@ -25,6 +25,8 @@ class _OrdersScreenState extends State<OrdersScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
 
+  // 0 = My Purchases, 1 = My Sales
+  int _roleIndex = 0;
   // 0 = Active, 1 = History
   int _tabIndex = 0;
   bool _loading = true;
@@ -57,10 +59,21 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Future<void> _loadOrders() async {
-    await OrderService.instance.fetchOrders();
+    setState(() => _loading = true);
+    final role = _roleIndex == 0 ? 'buyer' : 'seller';
+    await OrderService.instance.fetchOrders(role: role);
     if (mounted) {
       setState(() => _loading = false);
     }
+  }
+
+  void _switchRole(int index) {
+    if (index == _roleIndex) return;
+    setState(() {
+      _roleIndex = index;
+      _tabIndex = 0;
+    });
+    _loadOrders();
   }
 
   @override
@@ -131,9 +144,43 @@ class _OrdersScreenState extends State<OrdersScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
 
-                  // ── Tabs ──
+                  // ── Role toggle (Purchases / Sales) ──
+                  FadeTransition(
+                    opacity: _fade(0.03, 0.47),
+                    child: SlideTransition(
+                      position: _slide(0.03, 0.47),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Container(
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: AppColors.hairline2,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            children: [
+                              _RoleChip(
+                                label: 'My Purchases',
+                                active: _roleIndex == 0,
+                                onTap: () => _switchRole(0),
+                              ),
+                              _RoleChip(
+                                label: 'My Sales',
+                                active: _roleIndex == 1,
+                                onTap: () => _switchRole(1),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // ── Tabs (Active / History) ──
                   FadeTransition(
                     opacity: _fade(0.06, 0.50),
                     child: SlideTransition(
@@ -173,11 +220,15 @@ class _OrdersScreenState extends State<OrdersScreen>
                                 key: const ValueKey('active'),
                                 orders: activeOrders,
                                 emptyMessage: 'No active orders',
+                                isSeller: _roleIndex == 1,
+                                onStatusChanged: _loadOrders,
                               )
                             : _OrdersList(
                                 key: const ValueKey('history'),
                                 orders: historyOrders,
                                 emptyMessage: 'No past orders',
+                                isSeller: _roleIndex == 1,
+                                onStatusChanged: _loadOrders,
                               ),
                       ),
                     ),
@@ -185,6 +236,58 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ],
               ),
             ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Role chip ───────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _RoleChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _RoleChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.center,
+          margin: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: active ? AppColors.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+              color: active ? AppColors.inkStrong : AppColors.muted,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -243,11 +346,15 @@ class _TabLabel extends StatelessWidget {
 class _OrdersList extends StatelessWidget {
   final List<OrderData> orders;
   final String emptyMessage;
+  final bool isSeller;
+  final VoidCallback onStatusChanged;
 
   const _OrdersList({
     super.key,
     required this.orders,
     required this.emptyMessage,
+    required this.isSeller,
+    required this.onStatusChanged,
   });
 
   @override
@@ -271,7 +378,13 @@ class _OrdersList extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
-        children: orders.map((order) => _OrderRow(order: order)).toList(),
+        children: orders
+            .map((order) => _OrderRow(
+                  order: order,
+                  isSeller: isSeller,
+                  onStatusChanged: onStatusChanged,
+                ))
+            .toList(),
       ),
     );
   }
@@ -281,10 +394,23 @@ class _OrdersList extends StatelessWidget {
 // ── Order row ───────────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
-class _OrderRow extends StatelessWidget {
+class _OrderRow extends StatefulWidget {
   final OrderData order;
+  final bool isSeller;
+  final VoidCallback onStatusChanged;
 
-  const _OrderRow({required this.order});
+  const _OrderRow({
+    required this.order,
+    required this.isSeller,
+    required this.onStatusChanged,
+  });
+
+  @override
+  State<_OrderRow> createState() => _OrderRowState();
+}
+
+class _OrderRowState extends State<_OrderRow> {
+  bool _actionLoading = false;
 
   String _formatDate(DateTime dt) {
     final now = DateTime.now();
@@ -321,7 +447,7 @@ class _OrderRow extends StatelessWidget {
   String _statusLabel(String status) {
     switch (status) {
       case 'pending':
-        return 'Pending';
+        return widget.isSeller ? 'Awaiting approval' : 'Pending';
       case 'confirmed':
         return 'Confirmed';
       case 'shipped':
@@ -336,12 +462,11 @@ class _OrderRow extends StatelessWidget {
   }
 
   void _openDetail(BuildContext context) {
-    // Navigate to the first item's piece detail if available
-    if (order.items.isNotEmpty) {
+    if (widget.order.items.isNotEmpty) {
       Navigator.of(context).push(
         PageRouteBuilder(
           pageBuilder: (_, __, ___) =>
-              ProductDetailScreen(pieceId: order.items.first.pieceId),
+              ProductDetailScreen(pieceId: widget.order.items.first.pieceId),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 300),
@@ -350,11 +475,223 @@ class _OrderRow extends StatelessWidget {
     }
   }
 
+  Future<void> _acceptOrder() async {
+    setState(() => _actionLoading = true);
+    await OrderService.instance.updateStatus(
+      widget.order.id,
+      status: 'confirmed',
+    );
+    setState(() => _actionLoading = false);
+    widget.onStatusChanged();
+  }
+
+  Future<void> _rejectOrder() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Decline order?',
+          style: GoogleFonts.fraunces(
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+            color: AppColors.inkStrong,
+          ),
+        ),
+        content: Text(
+          'This will cancel the order and restore stock. This action cannot be undone.',
+          style: GoogleFonts.inter(
+            fontSize: 13.5,
+            color: AppColors.inkSoft,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Keep',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Decline',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.danger,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _actionLoading = true);
+    await OrderService.instance.updateStatus(
+      widget.order.id,
+      status: 'cancelled',
+    );
+    setState(() => _actionLoading = false);
+    widget.onStatusChanged();
+  }
+
+  Future<void> _markShipped() async {
+    final trackingCtrl = TextEditingController();
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Mark as shipped',
+          style: GoogleFonts.fraunces(
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+            color: AppColors.inkStrong,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Optionally add a tracking number:',
+              style: GoogleFonts.inter(
+                fontSize: 13.5,
+                color: AppColors.inkSoft,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: trackingCtrl,
+              decoration: InputDecoration(
+                hintText: 'Tracking number (optional)',
+                hintStyle: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.muted),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: AppColors.hairline),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+              ),
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: AppColors.inkStrong),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(trackingCtrl.text),
+            child: Text(
+              'Confirm',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.accent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+
+    setState(() => _actionLoading = true);
+    await OrderService.instance.updateStatus(
+      widget.order.id,
+      status: 'shipped',
+      trackingNumber: result.isEmpty ? null : result,
+    );
+    setState(() => _actionLoading = false);
+    widget.onStatusChanged();
+  }
+
+  Future<void> _cancelOrder() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Cancel order?',
+          style: GoogleFonts.fraunces(
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+            color: AppColors.inkStrong,
+          ),
+        ),
+        content: Text(
+          'This will cancel your order. This action cannot be undone.',
+          style: GoogleFonts.inter(
+            fontSize: 13.5,
+            color: AppColors.inkSoft,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Keep',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Cancel order',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.danger,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _actionLoading = true);
+    await OrderService.instance.cancelOrder(widget.order.id);
+    setState(() => _actionLoading = false);
+    widget.onStatusChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final order = widget.order;
     final firstItem = order.items.isNotEmpty ? order.items.first : null;
     final title = firstItem?.pieceTitle ?? 'Order #${order.id}';
-    final subtitle = order.sellerUsername ?? 'Seller';
+    final subtitle = widget.isSeller
+        ? order.buyerUsername ?? 'Buyer'
+        : order.sellerUsername ?? 'Seller';
     final color = _statusColor(order.status);
 
     return Column(
@@ -364,90 +701,110 @@ class _OrderRow extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
+            child: Column(
               children: [
-                // ── Product thumbnail ──
-                _buildThumbnail(firstItem),
-
-                const SizedBox(width: 14),
-
-                // ── Name + seller ──
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.inkStrong,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // ── Price + status + date ──
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
                   children: [
-                    Text(
-                      order.totalFormatted,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkSoft,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            _statusLabel(order.status),
+                    // ── Product thumbnail ──
+                    _buildThumbnail(firstItem),
+
+                    const SizedBox(width: 14),
+
+                    // ── Name + seller/buyer ──
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
-                              fontSize: 10,
+                              fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: color,
+                              color: AppColors.inkStrong,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatDate(order.createdAt),
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.muted,
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.muted,
+                            ),
                           ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // ── Price + status + date ──
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          order.totalFormatted,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                _statusLabel(order.status),
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: color,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _formatDate(order.createdAt),
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.muted,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ],
                 ),
+
+                // ── Action buttons ──
+                if (_actionLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  )
+                else
+                  _buildActions(order),
               ],
             ),
           ),
@@ -455,6 +812,73 @@ class _OrderRow extends StatelessWidget {
         const Divider(color: AppColors.hairline, height: 1, thickness: 1),
       ],
     );
+  }
+
+  Widget _buildActions(OrderData order) {
+    // Seller actions
+    if (widget.isSeller) {
+      if (order.status == 'pending') {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: _ActionButton(
+                  label: 'Accept',
+                  color: AppColors.success,
+                  onTap: _acceptOrder,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _ActionButton(
+                  label: 'Decline',
+                  color: AppColors.danger,
+                  outlined: true,
+                  onTap: _rejectOrder,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      if (order.status == 'confirmed') {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: _ActionButton(
+                  label: 'Mark shipped',
+                  color: AppColors.accent,
+                  onTap: _markShipped,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+
+    // Buyer actions
+    if (!widget.isSeller && order.status == 'pending') {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            _ActionButton(
+              label: 'Cancel',
+              color: AppColors.danger,
+              outlined: true,
+              onTap: _cancelOrder,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildThumbnail(OrderItemData? item) {
@@ -477,6 +901,52 @@ class _OrderRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Icon(Icons.image_outlined, size: 20, color: AppColors.muted),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Action button ───────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool outlined;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.color,
+    this.outlined = false,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: outlined ? Colors.transparent : color,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: color,
+            width: 1.2,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: outlined ? color : Colors.white,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

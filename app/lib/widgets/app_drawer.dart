@@ -20,7 +20,7 @@ import '../screens/settings/settings_screen.dart';
 import '../screens/list_piece/list_piece_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/rental_calendar/rental_calendar_screen.dart';
-import '../models/app_notification.dart';
+import '../core/notification_service.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -48,7 +48,7 @@ class _AppDrawerState extends State<AppDrawer>
       _Item('Collection',      Icons.bookmark_border_rounded,       '/collection',    badge: 0),
       _Item('Messages',        Icons.chat_bubble_outline_rounded,   '/messages',      badge: 2),
       _Item('Orders',          Icons.receipt_long_outlined,         '/orders'),
-      _Item('Notifications',   Icons.notifications_none_rounded,    '/notifications', badge: mockNotifications.where((n) => !n.isRead).length),
+      _Item('Notifications',   Icons.notifications_none_rounded,    '/notifications', badge: NotificationService.instance.unreadCount),
     ]),
     _Section('Account', [
       _Item('Profile',         Icons.person_outline_rounded,        '/profile'),
