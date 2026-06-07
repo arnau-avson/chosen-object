@@ -1,8 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../../models/product.dart';
-import '../../models/user_profile.dart';
+import '../../core/browse_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/shared_app_bar.dart';
@@ -10,83 +12,6 @@ import '../../core/collection_service.dart';
 import '../../widgets/save_to_collection_modal.dart';
 import '../product_detail/product_detail_screen.dart';
 import '../profile/user_profile_screen.dart';
-
-// ── Mock user data ─────────────────────────────────────────────
-
-class _MockUser {
-  final String name;
-  final String handle;
-  final String location;
-  final String role;
-  final Color avatarColor;
-
-  const _MockUser({
-    required this.name,
-    required this.handle,
-    required this.location,
-    required this.role,
-    required this.avatarColor,
-  });
-}
-
-const _mockUsers = <_MockUser>[
-  _MockUser(
-    name: 'Elena Martí',
-    handle: '@elenamarti',
-    location: 'Barcelona, ES',
-    role: 'Ceramic artist',
-    avatarColor: Color(0xFFB8543C),
-  ),
-  _MockUser(
-    name: 'Jordi Canudas',
-    handle: '@jcanudas',
-    location: 'Girona, ES',
-    role: 'Furniture designer',
-    avatarColor: Color(0xFF6B7A5A),
-  ),
-  _MockUser(
-    name: 'Marta Sala',
-    handle: '@martasala',
-    location: 'Barcelona, ES',
-    role: 'Ceramic artist',
-    avatarColor: Color(0xFFA8893E),
-  ),
-  _MockUser(
-    name: 'Pau Vives',
-    handle: '@pauvives',
-    location: 'Valencia, ES',
-    role: 'Textile designer',
-    avatarColor: Color(0xFF9A8C7B),
-  ),
-  _MockUser(
-    name: 'Laia Font',
-    handle: '@laiafont',
-    location: 'Madrid, ES',
-    role: 'Interior architect',
-    avatarColor: Color(0xFF2E2520),
-  ),
-  _MockUser(
-    name: 'Nuria Coll',
-    handle: '@nuriacoll',
-    location: 'Seville, ES',
-    role: 'Curator',
-    avatarColor: Color(0xFFB3A594),
-  ),
-  _MockUser(
-    name: 'Marc Esteve',
-    handle: '@marcesteve',
-    location: 'Terrassa, ES',
-    role: 'Sculptor',
-    avatarColor: Color(0xFF8A7D6A),
-  ),
-  _MockUser(
-    name: 'Anna Riera',
-    handle: '@annariera',
-    location: 'Milan, IT',
-    role: 'Lighting designer',
-    avatarColor: Color(0xFFC2B5A2),
-  ),
-];
 
 // ── Search Screen ──────────────────────────────────────────────
 
@@ -101,44 +26,13 @@ class _SearchScreenState extends State<SearchScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
   final _searchController = TextEditingController();
-  bool _showUsers = false; // false = Products, true = Users
+  bool _showUsers = false;
+  Timer? _debounce;
 
-  static const _pageSize = 4;
-  int _displayedProductCount = _pageSize;
-  int _displayedUserCount = _pageSize;
-  bool _loadingProducts = false;
+  List<BrowsePiece> _pieces = [];
+  List<BrowseUser> _users = [];
+  bool _loadingPieces = false;
   bool _loadingUsers = false;
-
-  Future<void> _loadMoreProducts() async {
-    if (_loadingProducts) return;
-    setState(() => _loadingProducts = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    setState(() {
-      _displayedProductCount = (_displayedProductCount + _pageSize)
-          .clamp(0, _filteredProducts.length);
-      _loadingProducts = false;
-    });
-  }
-
-  Future<void> _loadMoreUsers() async {
-    if (_loadingUsers) return;
-    setState(() => _loadingUsers = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    setState(() {
-      _displayedUserCount =
-          (_displayedUserCount + _pageSize).clamp(0, _filteredUsers.length);
-      _loadingUsers = false;
-    });
-  }
-
-  void _onSearchChanged() {
-    setState(() {
-      _displayedProductCount = _pageSize;
-      _displayedUserCount = _pageSize;
-    });
-  }
 
   @override
   void initState() {
@@ -147,13 +41,52 @@ class _SearchScreenState extends State<SearchScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _searchPieces();
+    _searchUsers();
   }
 
   @override
   void dispose() {
     _anim.dispose();
     _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  void _onSearchChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      _searchPieces();
+      _searchUsers();
+    });
+  }
+
+  Future<void> _searchPieces() async {
+    setState(() => _loadingPieces = true);
+    final query = _searchController.text.trim();
+    await BrowseService.instance.fetchPieces(
+      search: query.isEmpty ? null : query,
+      limit: 20,
+    );
+    if (!mounted) return;
+    setState(() {
+      _pieces = BrowseService.instance.pieces;
+      _loadingPieces = false;
+    });
+  }
+
+  Future<void> _searchUsers() async {
+    setState(() => _loadingUsers = true);
+    final query = _searchController.text.trim();
+    await BrowseService.instance.fetchUsers(
+      search: query.isEmpty ? null : query,
+      limit: 20,
+    );
+    if (!mounted) return;
+    setState(() {
+      _users = BrowseService.instance.users;
+      _loadingUsers = false;
+    });
   }
 
   Animation<double> _fade(double start, double end) => CurvedAnimation(
@@ -170,24 +103,6 @@ class _SearchScreenState extends State<SearchScreen>
               curve: Curves.easeOut),
         ),
       );
-
-  String get _query => _searchController.text.trim().toLowerCase();
-
-  List<Product> get _filteredProducts {
-    if (_query.isEmpty) return mockProducts;
-    return mockProducts.where((p) {
-      return p.name.toLowerCase().contains(_query) ||
-          p.designer.toLowerCase().contains(_query);
-    }).toList();
-  }
-
-  List<_MockUser> get _filteredUsers {
-    if (_query.isEmpty) return _mockUsers;
-    return _mockUsers.where((u) {
-      return u.name.toLowerCase().contains(_query) ||
-          u.handle.toLowerCase().contains(_query);
-    }).toList();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -210,13 +125,15 @@ class _SearchScreenState extends State<SearchScreen>
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (_) => _onSearchChanged(),
+                    onChanged: _onSearchChanged,
                     style: GoogleFonts.inter(
                       fontSize: 14.5,
                       color: AppColors.inkStrong,
                     ),
                     decoration: InputDecoration(
-                      hintText: _showUsers ? 'Search users...' : 'Search products...',
+                      hintText: _showUsers
+                          ? 'Search users...'
+                          : 'Search products...',
                       hintStyle: GoogleFonts.inter(
                         fontSize: 14.5,
                         color: AppColors.muted,
@@ -350,69 +267,21 @@ class _SearchScreenState extends State<SearchScreen>
           // ── List content ──
           SliverToBoxAdapter(
             child: _showUsers
-                ? _UsersListBox(
-                    key: ValueKey('users-${_filteredUsers.length}'),
-                    users: _filteredUsers
-                        .take(_displayedUserCount)
-                        .toList(),
-                  )
-                : _ProductsGridBox(
-                    key: ValueKey('products-${_filteredProducts.length}'),
-                    products: _filteredProducts
-                        .take(_displayedProductCount)
-                        .toList(),
-                  ),
+                ? (_loadingUsers
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 64),
+                        child: Center(child: LoadingSpinner()),
+                      )
+                    : _UsersListBox(users: _users))
+                : (_loadingPieces
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 64),
+                        child: Center(child: LoadingSpinner()),
+                      )
+                    : _ProductsGridBox(pieces: _pieces)),
           ),
 
-          // ── Load more / spinner ──
-          SliverToBoxAdapter(
-            child: Builder(builder: (_) {
-              final bool hasMore;
-              final bool loading;
-              final VoidCallback onTap;
-
-              if (_showUsers) {
-                hasMore = _displayedUserCount < _filteredUsers.length;
-                loading = _loadingUsers;
-                onTap = _loadMoreUsers;
-              } else {
-                hasMore = _displayedProductCount < _filteredProducts.length;
-                loading = _loadingProducts;
-                onTap = _loadMoreProducts;
-              }
-
-              if (!hasMore) return const SizedBox(height: 32);
-
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 32),
-                  child: loading
-                      ? const LoadingSpinner()
-                      : GestureDetector(
-                          onTap: onTap,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 28, vertical: 11),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                  color: AppColors.hairline, width: 1),
-                            ),
-                            child: Text(
-                              'Load more',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.inkSoft,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ),
-                        ),
-                ),
-              );
-            }),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
     );
@@ -464,11 +333,11 @@ class _TabLabel extends StatelessWidget {
   }
 }
 
-// ── Products grid box (staggered entrance) ────────────────────
+// ── Products grid box ────────────────────────────────────────
 
 class _ProductsGridBox extends StatefulWidget {
-  final List<Product> products;
-  const _ProductsGridBox({super.key, required this.products});
+  final List<BrowsePiece> pieces;
+  const _ProductsGridBox({required this.pieces});
 
   @override
   State<_ProductsGridBox> createState() => _ProductsGridBoxState();
@@ -495,17 +364,19 @@ class _ProductsGridBoxState extends State<_ProductsGridBox>
 
   @override
   Widget build(BuildContext context) {
-    final products = widget.products;
-    if (products.isEmpty) {
+    final pieces = widget.pieces;
+    if (pieces.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 64),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.search_off_rounded, size: 36, color: AppColors.hairline2),
+            const Icon(Icons.search_off_rounded,
+                size: 36, color: AppColors.hairline2),
             const SizedBox(height: 12),
             Text('No products found',
-                style: GoogleFonts.inter(fontSize: 14, color: AppColors.muted)),
+                style:
+                    GoogleFonts.inter(fontSize: 14, color: AppColors.muted)),
           ],
         ),
       );
@@ -515,7 +386,7 @@ class _ProductsGridBoxState extends State<_ProductsGridBox>
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: products.length,
+        itemCount: pieces.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 14,
@@ -536,7 +407,7 @@ class _ProductsGridBoxState extends State<_ProductsGridBox>
                 begin: const Offset(0, 0.12),
                 end: Offset.zero,
               ).animate(curve),
-              child: _ProductCard(product: products[i]),
+              child: _ProductCard(piece: pieces[i]),
             ),
           );
         },
@@ -545,11 +416,11 @@ class _ProductsGridBoxState extends State<_ProductsGridBox>
   }
 }
 
-// ── Users list box (staggered entrance) ───────────────────────
+// ── Users list box ───────────────────────────────────────────
 
 class _UsersListBox extends StatefulWidget {
-  final List<_MockUser> users;
-  const _UsersListBox({super.key, required this.users});
+  final List<BrowseUser> users;
+  const _UsersListBox({required this.users});
 
   @override
   State<_UsersListBox> createState() => _UsersListBoxState();
@@ -583,10 +454,12 @@ class _UsersListBoxState extends State<_UsersListBox>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.person_search_rounded, size: 36, color: AppColors.hairline2),
+            const Icon(Icons.person_search_rounded,
+                size: 36, color: AppColors.hairline2),
             const SizedBox(height: 12),
             Text('No users found',
-                style: GoogleFonts.inter(fontSize: 14, color: AppColors.muted)),
+                style:
+                    GoogleFonts.inter(fontSize: 14, color: AppColors.muted)),
           ],
         ),
       );
@@ -607,15 +480,13 @@ class _UsersListBoxState extends State<_UsersListBox>
             parent: _ctrl,
             curve: Interval(start, end, curve: Curves.easeOut),
           );
-          final fade = curve;
-          final slide = Tween<Offset>(
-            begin: const Offset(0, 0.15),
-            end: Offset.zero,
-          ).animate(curve);
           return FadeTransition(
-            opacity: fade,
+            opacity: curve,
             child: SlideTransition(
-              position: slide,
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.15),
+                end: Offset.zero,
+              ).animate(curve),
               child: _UserRow(user: users[i]),
             ),
           );
@@ -625,11 +496,11 @@ class _UsersListBoxState extends State<_UsersListBox>
   }
 }
 
-// ── Product card (same as HomeScreen) ─────────────────────────
+// ── Product card ─────────────────────────────────────────────
 
 class _ProductCard extends StatefulWidget {
-  final Product product;
-  const _ProductCard({required this.product});
+  final BrowsePiece piece;
+  const _ProductCard({required this.piece});
 
   @override
   State<_ProductCard> createState() => _ProductCardState();
@@ -642,7 +513,7 @@ class _ProductCardState extends State<_ProductCard> {
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, _, _) =>
-            ProductDetailScreen(productId: widget.product.id),
+            ProductDetailScreen(pieceId: widget.piece.id),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 300),
@@ -650,9 +521,34 @@ class _ProductCardState extends State<_ProductCard> {
     );
   }
 
+  List<String> _getImageList() {
+    final piece = widget.piece;
+    final list = <String>[];
+    if (piece.images != null) {
+      for (final img in piece.images!) {
+        final b64 = img['image_b64'] as String?;
+        if (b64 != null && b64.isNotEmpty) list.add(b64);
+      }
+    }
+    if (list.isEmpty && piece.coverImageB64 != null) {
+      list.add(piece.coverImageB64!);
+    }
+    return list;
+  }
+
+  String _getTag() {
+    final piece = widget.piece;
+    if (piece.rental && piece.priceCents > 0) return 'Buy or Rent';
+    if (piece.rental) return 'Rent';
+    return 'Buy';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final images = widget.product.images;
+    final images = _getImageList();
+    final tag = _getTag();
+    final piece = widget.piece;
+    final designerName = piece.sellerStudioName ?? piece.sellerUsername ?? '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -664,11 +560,24 @@ class _ProductCardState extends State<_ProductCard> {
               borderRadius: BorderRadius.circular(6),
               child: Stack(
                 children: [
-                  PageView.builder(
-                    itemCount: images.length,
-                    onPageChanged: (p) => setState(() => _currentPage = p),
-                    itemBuilder: (_, i) => Container(color: images[i]),
-                  ),
+                  if (images.isNotEmpty)
+                    PageView.builder(
+                      itemCount: images.length,
+                      onPageChanged: (p) => setState(() => _currentPage = p),
+                      itemBuilder: (_, i) => Image.memory(
+                        base64Decode(images[i]),
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      ),
+                    )
+                  else
+                    Container(
+                      color: AppColors.hairline,
+                      alignment: Alignment.center,
+                      child: Icon(Icons.image_outlined,
+                          size: 32, color: AppColors.muted),
+                    ),
                   Positioned(
                     top: 8,
                     left: 8,
@@ -680,7 +589,7 @@ class _ProductCardState extends State<_ProductCard> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        widget.product.tag,
+                        tag,
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
@@ -703,7 +612,8 @@ class _ProductCardState extends State<_ProductCard> {
                             duration: const Duration(milliseconds: 200),
                             width: active ? 6 : 5,
                             height: active ? 6 : 5,
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            margin:
+                                const EdgeInsets.symmetric(horizontal: 3),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: active
@@ -731,7 +641,7 @@ class _ProductCardState extends State<_ProductCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.product.name,
+                      piece.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
@@ -742,7 +652,7 @@ class _ProductCardState extends State<_ProductCard> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${widget.product.designer} · ${widget.product.year}',
+                      '$designerName${piece.year != null ? ' · ${piece.year}' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
@@ -753,7 +663,7 @@ class _ProductCardState extends State<_ProductCard> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.product.price,
+                      piece.priceFormatted,
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
@@ -766,13 +676,13 @@ class _ProductCardState extends State<_ProductCard> {
               ListenableBuilder(
                 listenable: CollectionService.instance,
                 builder: (context, _) {
-                  final saved = CollectionService.instance
-                      .isProductSaved(widget.product.id);
+                  final saved =
+                      CollectionService.instance.isProductSaved(piece.id);
                   return GestureDetector(
-                    onTap: () => CollectionService.instance
-                        .toggleSaved(widget.product.id),
-                    onLongPress: () => SaveToCollectionModal.show(
-                        context, widget.product.id),
+                    onTap: () =>
+                        CollectionService.instance.toggleSaved(piece.id),
+                    onLongPress: () =>
+                        SaveToCollectionModal.show(context, piece.id),
                     child: Padding(
                       padding: const EdgeInsets.only(left: 4, top: 1),
                       child: AnimatedSwitcher(
@@ -785,8 +695,7 @@ class _ProductCardState extends State<_ProductCard> {
                               : Icons.bookmark_border_rounded,
                           key: ValueKey(saved),
                           size: 18,
-                          color:
-                              saved ? AppColors.accent : AppColors.muted,
+                          color: saved ? AppColors.accent : AppColors.muted,
                         ),
                       ),
                     ),
@@ -804,43 +713,43 @@ class _ProductCardState extends State<_ProductCard> {
 // ── User row ──────────────────────────────────────────────────
 
 class _UserRow extends StatelessWidget {
-  final _MockUser user;
+  final BrowseUser user;
 
   const _UserRow({required this.user});
 
   @override
   Widget build(BuildContext context) {
+    final initials = user.studioName != null
+        ? user.studioName!.split(' ').map((w) => w[0]).take(2).join()
+        : user.username.split(' ').map((w) => w[0]).take(2).join().toUpperCase();
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        final profile = findProfileByName(user.name);
-        if (profile != null) {
-          Navigator.of(context).push(
-            PageRouteBuilder(
-              pageBuilder: (_, _, _) =>
-                  UserProfileScreen(userId: profile.id),
-              transitionsBuilder: (_, animation, _, child) =>
-                  FadeTransition(opacity: animation, child: child),
-              transitionDuration: const Duration(milliseconds: 300),
-            ),
-          );
-        }
+        Navigator.of(context).push(
+          PageRouteBuilder(
+            pageBuilder: (_, _, _) =>
+                UserProfileScreen(userId: user.id.toString()),
+            transitionsBuilder: (_, animation, _, child) =>
+                FadeTransition(opacity: animation, child: child),
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        );
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Row(
           children: [
-            // Circular avatar
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: user.avatarColor,
+                color: _parseColor(user.avatarColor),
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
               child: Text(
-                user.name.split(' ').map((w) => w[0]).take(2).join(),
+                initials,
                 style: GoogleFonts.fraunces(
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
@@ -849,13 +758,12 @@ class _UserRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 14),
-            // Name + handle
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    user.name,
+                    user.studioName ?? user.username,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.fraunces(
@@ -866,7 +774,7 @@ class _UserRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    user.handle,
+                    '@${user.username}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
@@ -879,45 +787,52 @@ class _UserRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Role + location aligned right, stacked vertically
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  user.role,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.inkSoft,
-                    letterSpacing: 0.1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.location_on_outlined,
-                      size: 12,
-                      color: AppColors.muted,
+                if (user.discipline != null)
+                  Text(
+                    user.discipline!,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkSoft,
+                      letterSpacing: 0.1,
                     ),
-                    const SizedBox(width: 2),
-                    Text(
-                      user.location.split(',').first,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w400,
+                  ),
+                if (user.city != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 12,
                         color: AppColors.muted,
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 2),
+                      Text(
+                        user.city!,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Color _parseColor(String hex) {
+    final cleaned = hex.replaceFirst('#', '');
+    return Color(int.parse('FF$cleaned', radix: 16));
   }
 }
 
@@ -935,8 +850,16 @@ class _FiltersModalState extends State<_FiltersModal> {
   int _selectedType = 0;
 
   static const _categories = [
-    'All', 'Painting', 'Sculpture', 'Furniture', 'Lighting',
-    'Watercolour', 'Ceramic', 'Decor', 'Textiles', 'Mixed media',
+    'All',
+    'Painting',
+    'Sculpture',
+    'Furniture',
+    'Lighting',
+    'Watercolour',
+    'Ceramic',
+    'Decor',
+    'Textiles',
+    'Mixed media',
   ];
   final Set<int> _selectedCategories = {0};
 
@@ -944,6 +867,36 @@ class _FiltersModalState extends State<_FiltersModal> {
   int _selectedSort = 0;
 
   RangeValues _priceRange = const RangeValues(0, 1500);
+
+  void _apply() {
+    String? discipline;
+    if (!_selectedCategories.contains(0)) {
+      final cats = _selectedCategories.map((i) => _categories[i]).toList();
+      discipline = cats.first;
+    }
+
+    String? sort;
+    switch (_selectedSort) {
+      case 1:
+        sort = 'price_asc';
+        break;
+      case 2:
+        sort = 'price_desc';
+        break;
+      case 3:
+        sort = 'newest';
+        break;
+    }
+
+    BrowseService.instance.fetchPieces(
+      discipline: discipline,
+      sort: sort,
+      minPrice: _priceRange.start.round() * 100,
+      maxPrice: _priceRange.end.round() * 100,
+    );
+
+    Navigator.of(context).pop();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -959,7 +912,8 @@ class _FiltersModalState extends State<_FiltersModal> {
         children: [
           Center(
             child: Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
                 color: AppColors.hairline,
                 borderRadius: BorderRadius.circular(2),
@@ -969,13 +923,19 @@ class _FiltersModalState extends State<_FiltersModal> {
           const SizedBox(height: 20),
           Row(
             children: [
-              Text('Filters', style: GoogleFonts.fraunces(
-                fontSize: 20, fontWeight: FontWeight.w400, color: AppColors.inkStrong,
-              )),
+              Text(
+                'Filters',
+                style: GoogleFonts.fraunces(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.inkStrong,
+                ),
+              ),
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.of(context).pop(),
-                child: const Icon(Icons.close_rounded, size: 20, color: AppColors.muted),
+                child: const Icon(Icons.close_rounded,
+                    size: 20, color: AppColors.muted),
               ),
             ],
           ),
@@ -989,14 +949,20 @@ class _FiltersModalState extends State<_FiltersModal> {
                   const SizedBox(height: 20),
                   _sectionLabel('TYPE'),
                   const SizedBox(height: 12),
-                  _chipRow(_types, (i) => _selectedType == i, (i) => setState(() => _selectedType = i)),
+                  _chipRow(
+                      _types,
+                      (i) => _selectedType == i,
+                      (i) => setState(() => _selectedType = i)),
 
                   const SizedBox(height: 24),
                   Row(children: [
                     _sectionLabel('PRICE RANGE'),
                     const Spacer(),
-                    Text('€${_priceRange.start.round()} – €${_priceRange.end.round()}',
-                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.inkSoft)),
+                    Text(
+                      '€${_priceRange.start.round()} – €${_priceRange.end.round()}',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.inkSoft),
+                    ),
                   ]),
                   const SizedBox(height: 4),
                   SliderTheme(
@@ -1006,11 +972,16 @@ class _FiltersModalState extends State<_FiltersModal> {
                       thumbColor: AppColors.ink,
                       overlayColor: AppColors.ink.withValues(alpha: 0.08),
                       trackHeight: 2,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                      rangeThumbShape: const RoundRangeSliderThumbShape(enabledThumbRadius: 7),
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      rangeThumbShape: const RoundRangeSliderThumbShape(
+                          enabledThumbRadius: 7),
                     ),
                     child: RangeSlider(
-                      values: _priceRange, min: 0, max: 3000, divisions: 60,
+                      values: _priceRange,
+                      min: 0,
+                      max: 3000,
+                      divisions: 60,
                       onChanged: (v) => setState(() => _priceRange = v),
                     ),
                   ),
@@ -1018,25 +989,33 @@ class _FiltersModalState extends State<_FiltersModal> {
                   const SizedBox(height: 20),
                   _sectionLabel('SORT BY'),
                   const SizedBox(height: 12),
-                  _chipRow(_sortOptions, (i) => _selectedSort == i, (i) => setState(() => _selectedSort = i)),
+                  _chipRow(
+                      _sortOptions,
+                      (i) => _selectedSort == i,
+                      (i) => setState(() => _selectedSort = i)),
 
                   const SizedBox(height: 24),
                   _sectionLabel('CATEGORY'),
                   const SizedBox(height: 12),
                   Wrap(
-                    spacing: 8, runSpacing: 10,
+                    spacing: 8,
+                    runSpacing: 10,
                     children: List.generate(_categories.length, (i) {
                       final active = _selectedCategories.contains(i);
                       return GestureDetector(
                         onTap: () {
                           setState(() {
                             if (i == 0) {
-                              _selectedCategories..clear()..add(0);
+                              _selectedCategories
+                                ..clear()
+                                ..add(0);
                             } else {
                               _selectedCategories.remove(0);
                               if (active) {
                                 _selectedCategories.remove(i);
-                                if (_selectedCategories.isEmpty) _selectedCategories.add(0);
+                                if (_selectedCategories.isEmpty) {
+                                  _selectedCategories.add(0);
+                                }
                               } else {
                                 _selectedCategories.add(i);
                               }
@@ -1053,7 +1032,7 @@ class _FiltersModalState extends State<_FiltersModal> {
             ),
           ),
           GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
+            onTap: _apply,
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 13),
               decoration: BoxDecoration(
@@ -1061,9 +1040,15 @@ class _FiltersModalState extends State<_FiltersModal> {
                 borderRadius: BorderRadius.circular(4),
               ),
               alignment: Alignment.center,
-              child: Text('Apply filters', style: GoogleFonts.inter(
-                fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.bone, letterSpacing: 0.1,
-              )),
+              child: Text(
+                'Apply filters',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.bone,
+                  letterSpacing: 0.1,
+                ),
+              ),
             ),
           ),
         ],
@@ -1071,33 +1056,47 @@ class _FiltersModalState extends State<_FiltersModal> {
     );
   }
 
-  Widget _sectionLabel(String text) => Text(text, style: GoogleFonts.inter(
-    fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted, letterSpacing: 1.4,
-  ));
+  Widget _sectionLabel(String text) => Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: AppColors.muted,
+          letterSpacing: 1.4,
+        ),
+      );
 
-  Widget _chipRow(List<String> items, bool Function(int) isActive, void Function(int) onTap) {
+  Widget _chipRow(List<String> items, bool Function(int) isActive,
+      void Function(int) onTap) {
     return Wrap(
-      spacing: 8, runSpacing: 10,
-      children: List.generate(items.length, (i) => GestureDetector(
-        onTap: () => onTap(i),
-        child: _chip(items[i], isActive(i)),
-      )),
+      spacing: 8,
+      runSpacing: 10,
+      children: List.generate(
+          items.length,
+          (i) => GestureDetector(
+                onTap: () => onTap(i),
+                child: _chip(items[i], isActive(i)),
+              )),
     );
   }
 
   Widget _chip(String label, bool active) => AnimatedContainer(
-    duration: const Duration(milliseconds: 180),
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-    decoration: BoxDecoration(
-      color: active ? AppColors.ink : Colors.transparent,
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: active ? AppColors.ink : AppColors.hairline, width: 1),
-    ),
-    child: Text(label, style: GoogleFonts.inter(
-      fontSize: 12.5,
-      fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-      color: active ? AppColors.bone : AppColors.inkSoft,
-      letterSpacing: 0.1,
-    )),
-  );
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: active ? AppColors.ink : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+              color: active ? AppColors.ink : AppColors.hairline, width: 1),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12.5,
+            fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+            color: active ? AppColors.bone : AppColors.inkSoft,
+            letterSpacing: 0.1,
+          ),
+        ),
+      );
 }

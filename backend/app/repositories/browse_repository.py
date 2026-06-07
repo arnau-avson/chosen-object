@@ -1,0 +1,131 @@
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+
+from ..models.collection import Save
+from ..models.follow import Follow
+from ..models.piece import Piece
+from ..models.user import User
+
+
+class BrowseRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def browse_pieces(
+        self,
+        search: str | None = None,
+        discipline: str | None = None,
+        sort: str | None = None,
+        min_price: int | None = None,
+        max_price: int | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[Piece]:
+        q = (
+            self.db.query(Piece)
+            .options(joinedload(Piece.images))
+            .filter(Piece.status == "active", Piece.stock > 0)
+        )
+
+        if search:
+            q = q.filter(Piece.title.ilike(f"%{search}%"))
+        if discipline:
+            q = q.filter(Piece.discipline == discipline)
+        if min_price is not None:
+            q = q.filter(Piece.price_cents >= min_price)
+        if max_price is not None:
+            q = q.filter(Piece.price_cents <= max_price)
+
+        if sort == "price_asc":
+            q = q.order_by(Piece.price_cents.asc())
+        elif sort == "price_desc":
+            q = q.order_by(Piece.price_cents.desc())
+        elif sort == "oldest":
+            q = q.order_by(Piece.created_at.asc())
+        else:
+            q = q.order_by(Piece.created_at.desc())
+
+        return q.offset(offset).limit(limit).all()
+
+    def get_piece_by_id(self, piece_id: int) -> Piece | None:
+        return (
+            self.db.query(Piece)
+            .options(joinedload(Piece.images))
+            .filter(Piece.id == piece_id, Piece.status == "active")
+            .first()
+        )
+
+    def get_user_by_id(self, user_id: int) -> User | None:
+        return self.db.query(User).filter(User.id == user_id, User.is_active == True).first()
+
+    def search_users(
+        self,
+        search: str | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[User]:
+        q = self.db.query(User).filter(User.is_active == True)
+
+        if search:
+            q = q.filter(
+                (User.username.ilike(f"%{search}%"))
+                | (User.studio_name.ilike(f"%{search}%"))
+            )
+
+        return q.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
+
+    def is_saved(self, user_id: int, piece_id: int) -> bool:
+        return (
+            self.db.query(Save)
+            .filter(Save.user_id == user_id, Save.piece_id == piece_id)
+            .first()
+            is not None
+        )
+
+    def is_following(self, follower_id: int, following_id: int) -> bool:
+        return (
+            self.db.query(Follow)
+            .filter(
+                Follow.follower_id == follower_id,
+                Follow.following_id == following_id,
+            )
+            .first()
+            is not None
+        )
+
+    def get_followers_count(self, user_id: int) -> int:
+        return (
+            self.db.query(func.count(Follow.id))
+            .filter(Follow.following_id == user_id)
+            .scalar()
+            or 0
+        )
+
+    def get_following_count(self, user_id: int) -> int:
+        return (
+            self.db.query(func.count(Follow.id))
+            .filter(Follow.follower_id == user_id)
+            .scalar()
+            or 0
+        )
+
+    def get_pieces_count(self, user_id: int) -> int:
+        return (
+            self.db.query(func.count(Piece.id))
+            .filter(Piece.user_id == user_id, Piece.status == "active")
+            .scalar()
+            or 0
+        )
+
+    def get_user_pieces(
+        self, user_id: int, offset: int = 0, limit: int = 20
+    ) -> list[Piece]:
+        return (
+            self.db.query(Piece)
+            .options(joinedload(Piece.images))
+            .filter(Piece.user_id == user_id, Piece.status == "active")
+            .order_by(Piece.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )

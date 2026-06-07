@@ -1,116 +1,198 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
-// ── SavedCollection model ────────────────────────────────────
+import 'api_client.dart';
+
+// ═════════════════════════════════════════════════════════════
+// ── CollectionService (singleton ChangeNotifier) ──────────────
+// ═════════════════════════════════════════════════════════════
+
+class SavedPiece {
+  final int id;
+  final String title;
+  final String? discipline;
+  final int priceCents;
+  final String? coverImageB64;
+  final DateTime savedAt;
+
+  SavedPiece({
+    required this.id,
+    required this.title,
+    this.discipline,
+    required this.priceCents,
+    this.coverImageB64,
+    required this.savedAt,
+  });
+
+  factory SavedPiece.fromJson(Map<String, dynamic> j) => SavedPiece(
+        id: j['id'] as int,
+        title: j['title'] as String,
+        discipline: j['discipline'] as String?,
+        priceCents: j['price_cents'] as int,
+        coverImageB64: j['cover_image_b64'] as String?,
+        savedAt: DateTime.parse(j['saved_at'] as String),
+      );
+}
 
 class SavedCollection {
-  final String id;
-  String name;
-  Color? coverColor;
-  final List<String> productIds;
+  final int id;
+  final String name;
+  final int pieceCount;
   final DateTime createdAt;
+  final List<SavedPiece> pieces;
 
   SavedCollection({
     required this.id,
     required this.name,
-    this.coverColor,
-    List<String>? productIds,
-    DateTime? createdAt,
-  })  : productIds = productIds ?? [],
-        createdAt = createdAt ?? DateTime.now();
+    this.pieceCount = 0,
+    required this.createdAt,
+    this.pieces = const [],
+  });
+
+  factory SavedCollection.fromJson(Map<String, dynamic> j) => SavedCollection(
+        id: j['id'] as int,
+        name: j['name'] as String,
+        pieceCount: j['piece_count'] as int? ?? 0,
+        createdAt: DateTime.parse(j['created_at'] as String),
+        pieces: (j['pieces'] as List?)
+                ?.map((p) => SavedPiece.fromJson(p as Map<String, dynamic>))
+                .toList() ??
+            [],
+      );
 }
 
-// ── CollectionService (singleton ChangeNotifier) ─────────────
-
 class CollectionService extends ChangeNotifier {
-  // Singleton
   static final CollectionService _instance = CollectionService._();
   static CollectionService get instance => _instance;
   CollectionService._();
 
-  final List<SavedCollection> _collections = [];
-  List<SavedCollection> get collections => List.unmodifiable(_collections);
+  List<SavedPiece> _savedPieces = [];
+  List<SavedPiece> get savedPieces => _savedPieces;
 
-  /// Products saved without belonging to any specific collection.
-  final Set<String> _savedProductIds = {};
+  List<SavedCollection> _collections = [];
+  List<SavedCollection> get collections => _collections;
 
-  /// All unique saved product IDs (loose saves + all collections).
-  Set<String> get allSavedProductIds =>
-      {..._savedProductIds, ..._collections.expand((c) => c.productIds)};
+  final Set<int> _savedPieceIds = {};
 
-  /// Whether the given product is saved (loose or in any collection).
-  bool isProductSaved(String productId) =>
-      _savedProductIds.contains(productId) ||
-      _collections.any((c) => c.productIds.contains(productId));
+  bool isProductSaved(int pieceId) => _savedPieceIds.contains(pieceId);
 
-  /// Quick toggle: save (loose) or unsave from everywhere.
-  void toggleSaved(String productId) {
-    if (isProductSaved(productId)) {
-      // Unsave from loose set and all collections
-      _savedProductIds.remove(productId);
-      for (final col in _collections) {
-        col.productIds.remove(productId);
+  /// Toggle save for a piece.
+  Future<bool> toggleSaved(int pieceId) async {
+    try {
+      final data = await ApiClient.instance.post('/saves/$pieceId', {});
+      final saved = (data as Map<String, dynamic>)['saved'] as bool;
+      if (saved) {
+        _savedPieceIds.add(pieceId);
+      } else {
+        _savedPieceIds.remove(pieceId);
       }
-    } else {
-      _savedProductIds.add(productId);
+      notifyListeners();
+      return saved;
+    } catch (_) {
+      return false;
     }
-    notifyListeners();
   }
 
-  /// Which collections contain the given product.
-  List<SavedCollection> collectionsForProduct(String productId) =>
-      _collections.where((c) => c.productIds.contains(productId)).toList();
-
-  /// Create a new collection, optionally adding an initial product.
-  SavedCollection createCollection(
-    String name, {
-    Color? coverColor,
-    String? initialProductId,
-  }) {
-    final id =
-        '${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '-')}-${DateTime.now().millisecondsSinceEpoch}';
-    final collection = SavedCollection(
-      id: id,
-      name: name,
-      coverColor: coverColor,
-    );
-    if (initialProductId != null) {
-      collection.productIds.add(initialProductId);
+  /// Fetch saved pieces.
+  Future<void> fetchSavedPieces({int offset = 0, int limit = 20}) async {
+    try {
+      final data =
+          await ApiClient.instance.get('/saves?offset=$offset&limit=$limit');
+      _savedPieces = (data as List)
+          .map((j) => SavedPiece.fromJson(j as Map<String, dynamic>))
+          .toList();
+      _savedPieceIds.clear();
+      for (final p in _savedPieces) {
+        _savedPieceIds.add(p.id);
+      }
+      notifyListeners();
+    } catch (_) {
+      // keep existing
     }
-    _collections.add(collection);
-    notifyListeners();
-    return collection;
   }
 
-  /// Toggle a product in/out of a specific collection.
-  void toggleProductInCollection(String collectionId, String productId) {
-    final col = _collections.firstWhere((c) => c.id == collectionId);
-    if (col.productIds.contains(productId)) {
-      col.productIds.remove(productId);
-    } else {
-      col.productIds.add(productId);
+  /// Fetch collections.
+  Future<void> fetchCollections() async {
+    try {
+      final data = await ApiClient.instance.get('/collections');
+      _collections = (data as List)
+          .map((j) => SavedCollection.fromJson(j as Map<String, dynamic>))
+          .toList();
+      notifyListeners();
+    } catch (_) {
+      // keep existing
     }
-    notifyListeners();
   }
 
-  /// Remove a product from everywhere (loose set + all collections).
-  void unsaveProduct(String productId) {
-    _savedProductIds.remove(productId);
-    for (final col in _collections) {
-      col.productIds.remove(productId);
+  /// Create a collection.
+  Future<SavedCollection?> createCollection(String name) async {
+    try {
+      final data =
+          await ApiClient.instance.post('/collections', {'name': name});
+      final col =
+          SavedCollection.fromJson(data as Map<String, dynamic>);
+      _collections.insert(0, col);
+      notifyListeners();
+      return col;
+    } catch (_) {
+      return null;
     }
-    notifyListeners();
   }
 
-  /// Delete a collection entirely.
-  void deleteCollection(String collectionId) {
-    _collections.removeWhere((c) => c.id == collectionId);
-    notifyListeners();
+  /// Get collection detail with pieces.
+  Future<SavedCollection?> fetchCollectionDetail(int collectionId) async {
+    try {
+      final data =
+          await ApiClient.instance.get('/collections/$collectionId');
+      return SavedCollection.fromJson(data as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Rename a collection.
-  void renameCollection(String collectionId, String newName) {
-    final col = _collections.firstWhere((c) => c.id == collectionId);
-    col.name = newName;
-    notifyListeners();
+  Future<void> renameCollection(int collectionId, String newName) async {
+    try {
+      await ApiClient.instance
+          .patch('/collections/$collectionId', {'name': newName});
+      final idx = _collections.indexWhere((c) => c.id == collectionId);
+      if (idx != -1) {
+        await fetchCollections();
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /// Delete a collection.
+  Future<void> deleteCollection(int collectionId) async {
+    try {
+      await ApiClient.instance.delete('/collections/$collectionId');
+      _collections.removeWhere((c) => c.id == collectionId);
+      notifyListeners();
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /// Add piece to collection.
+  Future<void> addPieceToCollection(int collectionId, int pieceId) async {
+    try {
+      await ApiClient.instance
+          .post('/collections/$collectionId/pieces/$pieceId', {});
+      notifyListeners();
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /// Remove piece from collection.
+  Future<void> removePieceFromCollection(int collectionId, int pieceId) async {
+    try {
+      await ApiClient.instance
+          .delete('/collections/$collectionId/pieces/$pieceId');
+      notifyListeners();
+    } catch (_) {
+      // ignore
+    }
   }
 }

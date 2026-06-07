@@ -8,16 +8,16 @@ import '../core/collection_service.dart';
 // ═════════════════════════════════════════════════════════════
 
 class SaveToCollectionModal extends StatefulWidget {
-  final String productId;
-  const SaveToCollectionModal({super.key, required this.productId});
+  final int pieceId;
+  const SaveToCollectionModal({super.key, required this.pieceId});
 
   /// Show as a bottom sheet from anywhere.
-  static Future<void> show(BuildContext context, String productId) {
+  static Future<void> show(BuildContext context, int pieceId) {
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => SaveToCollectionModal(productId: productId),
+      builder: (_) => SaveToCollectionModal(pieceId: pieceId),
     );
   }
 
@@ -30,6 +30,29 @@ class _SaveToCollectionModalState extends State<SaveToCollectionModal> {
   final _nameController = TextEditingController();
   final _focusNode = FocusNode();
 
+  /// Track which collections contain this piece (loaded from detail).
+  final Set<int> _collectionsContainingPiece = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCollectionMembership();
+  }
+
+  Future<void> _loadCollectionMembership() async {
+    final service = CollectionService.instance;
+    for (final col in service.collections) {
+      final detail = await service.fetchCollectionDetail(col.id);
+      if (detail != null &&
+          detail.pieces.any((p) => p.id == widget.pieceId)) {
+        _collectionsContainingPiece.add(col.id);
+      }
+    }
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -37,15 +60,29 @@ class _SaveToCollectionModalState extends State<SaveToCollectionModal> {
     super.dispose();
   }
 
-  void _submitNew() {
+  Future<void> _submitNew() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
-    CollectionService.instance.createCollection(
-      name,
-      initialProductId: widget.productId,
-    );
+    final col = await CollectionService.instance.createCollection(name);
+    if (col != null) {
+      await CollectionService.instance
+          .addPieceToCollection(col.id, widget.pieceId);
+      _collectionsContainingPiece.add(col.id);
+    }
     _nameController.clear();
-    setState(() => _creating = false);
+    if (mounted) setState(() => _creating = false);
+  }
+
+  Future<void> _togglePieceInCollection(int collectionId) async {
+    final service = CollectionService.instance;
+    if (_collectionsContainingPiece.contains(collectionId)) {
+      await service.removePieceFromCollection(collectionId, widget.pieceId);
+      _collectionsContainingPiece.remove(collectionId);
+    } else {
+      await service.addPieceToCollection(collectionId, widget.pieceId);
+      _collectionsContainingPiece.add(collectionId);
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -127,10 +164,9 @@ class _SaveToCollectionModalState extends State<SaveToCollectionModal> {
                 else
                   ...collections.map((col) {
                     final contains =
-                        col.productIds.contains(widget.productId);
+                        _collectionsContainingPiece.contains(col.id);
                     return InkWell(
-                      onTap: () => service.toggleProductInCollection(
-                          col.id, widget.productId),
+                      onTap: () => _togglePieceInCollection(col.id),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 12),
@@ -157,7 +193,7 @@ class _SaveToCollectionModalState extends State<SaveToCollectionModal> {
                               ),
                             ),
                             Text(
-                              '${col.productIds.length}',
+                              '${col.pieceCount}',
                               style: GoogleFonts.inter(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w500,

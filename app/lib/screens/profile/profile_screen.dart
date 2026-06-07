@@ -58,7 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, _, _) =>
-            FollowersScreen(userId: 'me', initialTab: tab),
+            FollowersScreen(userId: ProfileService.instance.userId, initialTab: tab),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 300),

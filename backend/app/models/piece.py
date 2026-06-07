@@ -37,6 +37,10 @@ class Piece(Base):
     stock: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     ships_to: Mapped[str | None] = mapped_column(Text, nullable=True)
     packaging: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rental_daily_rate_cents: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="active"
     )

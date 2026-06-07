@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../../models/product.dart';
+import '../../core/browse_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/save_to_collection_modal.dart';
@@ -20,23 +22,10 @@ class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
 
-  static const _pageSize = 4;
-  int _displayedCount = _pageSize;
-  bool _loading = false;
-
-  bool get _hasMore => _displayedCount < mockProducts.length;
-
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    setState(() {
-      _displayedCount =
-          (_displayedCount + _pageSize).clamp(0, mockProducts.length);
-      _loading = false;
-    });
-  }
+  bool _loadingMore = false;
+  int _offset = 0;
+  static const _pageSize = 20;
+  bool _hasMore = true;
 
   @override
   void initState() {
@@ -45,6 +34,28 @@ class _HomeScreenState extends State<HomeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _initialLoad();
+  }
+
+  Future<void> _initialLoad() async {
+    await BrowseService.instance.fetchPieces(offset: 0, limit: _pageSize);
+    if (!mounted) return;
+    setState(() {
+      _offset = BrowseService.instance.pieces.length;
+      _hasMore = BrowseService.instance.pieces.length >= _pageSize;
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    await BrowseService.instance.fetchPieces(offset: _offset, limit: _pageSize);
+    if (!mounted) return;
+    setState(() {
+      _offset = BrowseService.instance.pieces.length;
+      _hasMore = BrowseService.instance.pieces.length >= _offset;
+      _loadingMore = false;
+    });
   }
 
   @override
@@ -74,65 +85,74 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: AppColors.bone,
       drawer: const AppDrawer(currentRoute: '/home'),
       appBar: const SharedAppBar(currentRoute: '/home'),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FadeTransition(
-              opacity: _fade(0.0, 0.5),
-              child: SlideTransition(
-                position: _slide(0.0, 0.5),
-                child: const _SeasonHeader(),
-              ),
-            ),
-            const SizedBox(height: 28),
-            FadeTransition(
-              opacity: _fade(0.2, 0.7),
-              child: SlideTransition(
-                position: _slide(0.2, 0.7),
-                child: _ProductGrid(
-                  products: mockProducts.take(_displayedCount).toList(),
+      body: ListenableBuilder(
+        listenable: BrowseService.instance,
+        builder: (context, _) {
+          final pieces = BrowseService.instance.pieces;
+          final loading = BrowseService.instance.loading && pieces.isEmpty;
+
+          if (loading) {
+            return const Center(child: LoadingSpinner());
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FadeTransition(
+                  opacity: _fade(0.0, 0.5),
+                  child: SlideTransition(
+                    position: _slide(0.0, 0.5),
+                    child: _SeasonHeader(pieceCount: pieces.length),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            // ── Load more / spinner ──
-            if (_hasMore)
-              Center(
-                child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.only(bottom: 32),
-                        child: LoadingSpinner(),
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.only(bottom: 32),
-                        child: GestureDetector(
-                          onTap: _loadMore,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 28, vertical: 11),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                  color: AppColors.hairline, width: 1),
-                            ),
-                            child: Text(
-                              'Load more',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.inkSoft,
-                                letterSpacing: 0.2,
+                const SizedBox(height: 28),
+                FadeTransition(
+                  opacity: _fade(0.2, 0.7),
+                  child: SlideTransition(
+                    position: _slide(0.2, 0.7),
+                    child: _ProductGrid(pieces: pieces),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                if (_hasMore)
+                  Center(
+                    child: _loadingMore
+                        ? const Padding(
+                            padding: EdgeInsets.only(bottom: 32),
+                            child: LoadingSpinner(),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.only(bottom: 32),
+                            child: GestureDetector(
+                              onTap: _loadMore,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 28, vertical: 11),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                      color: AppColors.hairline, width: 1),
+                                ),
+                                child: Text(
+                                  'Load more',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.inkSoft,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-              )
-            else
-              const SizedBox(height: 32),
-          ],
-        ),
+                  )
+                else
+                  const SizedBox(height: 32),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -151,9 +171,8 @@ String _currentSeason() {
 }
 
 class _SeasonHeader extends StatelessWidget {
-  const _SeasonHeader();
-
-  static const int _pieceCount = 19;
+  final int pieceCount;
+  const _SeasonHeader({required this.pieceCount});
 
   @override
   Widget build(BuildContext context) {
@@ -261,7 +280,7 @@ class _SeasonHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$_pieceCount pieces curated',
+                    '$pieceCount pieces curated',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
@@ -315,11 +334,9 @@ class _FiltersModal extends StatefulWidget {
 }
 
 class _FiltersModalState extends State<_FiltersModal> {
-  // ── Transaction type ──
   static const _types = ['All', 'Buy', 'Rent', 'Buy or Rent'];
   int _selectedType = 0;
 
-  // ── Category ──
   static const _categories = [
     'All',
     'Painting',
@@ -334,12 +351,40 @@ class _FiltersModalState extends State<_FiltersModal> {
   ];
   final Set<int> _selectedCategories = {0};
 
-  // ── Sort ──
   static const _sortOptions = ['Relevance', 'Price ↑', 'Price ↓', 'Newest'];
   int _selectedSort = 0;
 
-  // ── Price range ──
   RangeValues _priceRange = const RangeValues(0, 1500);
+
+  void _apply() {
+    String? discipline;
+    if (!_selectedCategories.contains(0)) {
+      final cats = _selectedCategories.map((i) => _categories[i]).toList();
+      discipline = cats.first; // simplified: use first selected
+    }
+
+    String? sort;
+    switch (_selectedSort) {
+      case 1:
+        sort = 'price_asc';
+        break;
+      case 2:
+        sort = 'price_desc';
+        break;
+      case 3:
+        sort = 'newest';
+        break;
+    }
+
+    BrowseService.instance.fetchPieces(
+      discipline: discipline,
+      sort: sort,
+      minPrice: _priceRange.start.round() * 100,
+      maxPrice: _priceRange.end.round() * 100,
+    );
+
+    Navigator.of(context).pop();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -353,7 +398,6 @@ class _FiltersModalState extends State<_FiltersModal> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Handle bar
           Center(
             child: Container(
               width: 36,
@@ -365,8 +409,6 @@ class _FiltersModalState extends State<_FiltersModal> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // Header
           Row(
             children: [
               Text(
@@ -391,213 +433,218 @@ class _FiltersModalState extends State<_FiltersModal> {
           const SizedBox(height: 6),
           Container(height: 1, color: AppColors.hairline),
 
-          // ── Scrollable filter content ──
           Flexible(
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-
-          // ── Type section ──
-          const SizedBox(height: 20),
-          Text(
-            'TYPE',
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.muted,
-              letterSpacing: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 10,
-            children: List.generate(_types.length, (i) {
-              final active = _selectedType == i;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedType = i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: active ? AppColors.ink : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: active ? AppColors.ink : AppColors.hairline,
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    _types[i],
+                  // ── Type section ──
+                  const SizedBox(height: 20),
+                  Text(
+                    'TYPE',
                     style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-                      color: active ? AppColors.bone : AppColors.inkSoft,
-                      letterSpacing: 0.1,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.muted,
+                      letterSpacing: 1.4,
                     ),
                   ),
-                ),
-              );
-            }),
-          ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 10,
+                    children: List.generate(_types.length, (i) {
+                      final active = _selectedType == i;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedType = i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: active ? AppColors.ink : Colors.transparent,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: active ? AppColors.ink : AppColors.hairline,
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            _types[i],
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight:
+                                  active ? FontWeight.w500 : FontWeight.w400,
+                              color:
+                                  active ? AppColors.bone : AppColors.inkSoft,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
 
-          // ── Price range section ──
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text(
-                'PRICE RANGE',
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
-                  letterSpacing: 1.4,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '€${_priceRange.start.round()} – €${_priceRange.end.round()}',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.inkSoft,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          SliderTheme(
-            data: SliderThemeData(
-              activeTrackColor: AppColors.ink,
-              inactiveTrackColor: AppColors.hairline,
-              thumbColor: AppColors.ink,
-              overlayColor: AppColors.ink.withValues(alpha: 0.08),
-              trackHeight: 2,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              rangeThumbShape:
-                  const RoundRangeSliderThumbShape(enabledThumbRadius: 7),
-            ),
-            child: RangeSlider(
-              values: _priceRange,
-              min: 0,
-              max: 3000,
-              divisions: 60,
-              onChanged: (v) => setState(() => _priceRange = v),
-            ),
-          ),
-
-          // ── Sort section ──
-          const SizedBox(height: 20),
-          Text(
-            'SORT BY',
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.muted,
-              letterSpacing: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 10,
-            children: List.generate(_sortOptions.length, (i) {
-              final active = _selectedSort == i;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedSort = i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: active ? AppColors.ink : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: active ? AppColors.ink : AppColors.hairline,
-                      width: 1,
+                  // ── Price range section ──
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Text(
+                        'PRICE RANGE',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.muted,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '€${_priceRange.start.round()} – €${_priceRange.end.round()}',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  SliderTheme(
+                    data: SliderThemeData(
+                      activeTrackColor: AppColors.ink,
+                      inactiveTrackColor: AppColors.hairline,
+                      thumbColor: AppColors.ink,
+                      overlayColor: AppColors.ink.withValues(alpha: 0.08),
+                      trackHeight: 2,
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      rangeThumbShape: const RoundRangeSliderThumbShape(
+                          enabledThumbRadius: 7),
+                    ),
+                    child: RangeSlider(
+                      values: _priceRange,
+                      min: 0,
+                      max: 3000,
+                      divisions: 60,
+                      onChanged: (v) => setState(() => _priceRange = v),
                     ),
                   ),
-                  child: Text(
-                    _sortOptions[i],
+
+                  // ── Sort section ──
+                  const SizedBox(height: 20),
+                  Text(
+                    'SORT BY',
                     style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-                      color: active ? AppColors.bone : AppColors.inkSoft,
-                      letterSpacing: 0.1,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.muted,
+                      letterSpacing: 1.4,
                     ),
                   ),
-                ),
-              );
-            }),
-          ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 10,
+                    children: List.generate(_sortOptions.length, (i) {
+                      final active = _selectedSort == i;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedSort = i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: active ? AppColors.ink : Colors.transparent,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: active ? AppColors.ink : AppColors.hairline,
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            _sortOptions[i],
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight:
+                                  active ? FontWeight.w500 : FontWeight.w400,
+                              color:
+                                  active ? AppColors.bone : AppColors.inkSoft,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
 
-          // ── Category section ──
-          const SizedBox(height: 24),
-          Text(
-            'CATEGORY',
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.muted,
-              letterSpacing: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 10,
-            children: List.generate(_categories.length, (i) {
-              final active = _selectedCategories.contains(i);
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (i == 0) {
-                      _selectedCategories
-                        ..clear()
-                        ..add(0);
-                    } else {
-                      _selectedCategories.remove(0);
-                      if (active) {
-                        _selectedCategories.remove(i);
-                        if (_selectedCategories.isEmpty) {
-                          _selectedCategories.add(0);
-                        }
-                      } else {
-                        _selectedCategories.add(i);
-                      }
-                    }
-                  });
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: active ? AppColors.ink : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: active ? AppColors.ink : AppColors.hairline,
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    _categories[i],
+                  // ── Category section ──
+                  const SizedBox(height: 24),
+                  Text(
+                    'CATEGORY',
                     style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-                      color: active ? AppColors.bone : AppColors.inkSoft,
-                      letterSpacing: 0.1,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.muted,
+                      letterSpacing: 1.4,
                     ),
                   ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 28),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 10,
+                    children: List.generate(_categories.length, (i) {
+                      final active = _selectedCategories.contains(i);
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (i == 0) {
+                              _selectedCategories
+                                ..clear()
+                                ..add(0);
+                            } else {
+                              _selectedCategories.remove(0);
+                              if (active) {
+                                _selectedCategories.remove(i);
+                                if (_selectedCategories.isEmpty) {
+                                  _selectedCategories.add(0);
+                                }
+                              } else {
+                                _selectedCategories.add(i);
+                              }
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: active ? AppColors.ink : Colors.transparent,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: active ? AppColors.ink : AppColors.hairline,
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            _categories[i],
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight:
+                                  active ? FontWeight.w500 : FontWeight.w400,
+                              color:
+                                  active ? AppColors.bone : AppColors.inkSoft,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 28),
                 ],
               ),
             ),
@@ -605,7 +652,7 @@ class _FiltersModalState extends State<_FiltersModal> {
 
           // Apply button
           GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
+            onTap: _apply,
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 13),
               decoration: BoxDecoration(
@@ -633,8 +680,8 @@ class _FiltersModalState extends State<_FiltersModal> {
 // ── Product grid ─────────────────────────────────────────────
 
 class _ProductGrid extends StatelessWidget {
-  final List<Product> products;
-  const _ProductGrid({required this.products});
+  final List<BrowsePiece> pieces;
+  const _ProductGrid({required this.pieces});
 
   @override
   Widget build(BuildContext context) {
@@ -643,14 +690,14 @@ class _ProductGrid extends StatelessWidget {
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: products.length,
+        itemCount: pieces.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 14,
           mainAxisSpacing: 24,
           childAspectRatio: 0.58,
         ),
-        itemBuilder: (_, i) => _ProductCard(product: products[i]),
+        itemBuilder: (_, i) => _ProductCard(piece: pieces[i]),
       ),
     );
   }
@@ -659,8 +706,8 @@ class _ProductGrid extends StatelessWidget {
 // ── Product card with swipeable images ───────────────────────
 
 class _ProductCard extends StatefulWidget {
-  final Product product;
-  const _ProductCard({required this.product});
+  final BrowsePiece piece;
+  const _ProductCard({required this.piece});
 
   @override
   State<_ProductCard> createState() => _ProductCardState();
@@ -673,7 +720,7 @@ class _ProductCardState extends State<_ProductCard> {
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, _, _) =>
-            ProductDetailScreen(productId: widget.product.id),
+            ProductDetailScreen(pieceId: widget.piece.id),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 300),
@@ -681,9 +728,34 @@ class _ProductCardState extends State<_ProductCard> {
     );
   }
 
+  List<String> _getImageList() {
+    final piece = widget.piece;
+    final list = <String>[];
+    if (piece.images != null) {
+      for (final img in piece.images!) {
+        final b64 = img['image_b64'] as String?;
+        if (b64 != null && b64.isNotEmpty) list.add(b64);
+      }
+    }
+    if (list.isEmpty && piece.coverImageB64 != null) {
+      list.add(piece.coverImageB64!);
+    }
+    return list;
+  }
+
+  String _getTag() {
+    final piece = widget.piece;
+    if (piece.rental && piece.priceCents > 0) return 'Buy or Rent';
+    if (piece.rental) return 'Rent';
+    return 'Buy';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final images = widget.product.images;
+    final images = _getImageList();
+    final tag = _getTag();
+    final piece = widget.piece;
+    final designerName = piece.sellerStudioName ?? piece.sellerUsername ?? '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,11 +768,24 @@ class _ProductCardState extends State<_ProductCard> {
               borderRadius: BorderRadius.circular(6),
               child: Stack(
                 children: [
-                  PageView.builder(
-                    itemCount: images.length,
-                    onPageChanged: (p) => setState(() => _currentPage = p),
-                    itemBuilder: (_, i) => Container(color: images[i]),
-                  ),
+                  if (images.isNotEmpty)
+                    PageView.builder(
+                      itemCount: images.length,
+                      onPageChanged: (p) => setState(() => _currentPage = p),
+                      itemBuilder: (_, i) => Image.memory(
+                        base64Decode(images[i]),
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      ),
+                    )
+                  else
+                    Container(
+                      color: AppColors.hairline,
+                      alignment: Alignment.center,
+                      child: Icon(Icons.image_outlined,
+                          size: 32, color: AppColors.muted),
+                    ),
 
                   // Tag badge
                   Positioned(
@@ -716,7 +801,7 @@ class _ProductCardState extends State<_ProductCard> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        widget.product.tag,
+                        tag,
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
@@ -773,7 +858,7 @@ class _ProductCardState extends State<_ProductCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.product.name,
+                      piece.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
@@ -784,7 +869,7 @@ class _ProductCardState extends State<_ProductCard> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${widget.product.designer} · ${widget.product.year}',
+                      '$designerName${piece.year != null ? ' · ${piece.year}' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
@@ -795,7 +880,7 @@ class _ProductCardState extends State<_ProductCard> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.product.price,
+                      piece.priceFormatted,
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
@@ -808,13 +893,13 @@ class _ProductCardState extends State<_ProductCard> {
               ListenableBuilder(
                 listenable: CollectionService.instance,
                 builder: (context, _) {
-                  final saved = CollectionService.instance
-                      .isProductSaved(widget.product.id);
+                  final saved =
+                      CollectionService.instance.isProductSaved(piece.id);
                   return GestureDetector(
-                    onTap: () => CollectionService.instance
-                        .toggleSaved(widget.product.id),
-                    onLongPress: () => SaveToCollectionModal.show(
-                        context, widget.product.id),
+                    onTap: () =>
+                        CollectionService.instance.toggleSaved(piece.id),
+                    onLongPress: () =>
+                        SaveToCollectionModal.show(context, piece.id),
                     child: Padding(
                       padding: const EdgeInsets.only(left: 4, top: 1),
                       child: AnimatedSwitcher(

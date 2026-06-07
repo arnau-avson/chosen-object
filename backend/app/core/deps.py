@@ -11,6 +11,7 @@ from ..repositories.user_repository import UserRepository
 from ..models.user import User
 
 bearer_scheme = HTTPBearer(auto_error=True)
+bearer_scheme_optional = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
@@ -33,4 +34,27 @@ def get_current_user(
     user = UserRepository(db).get_by_id(int(user_id))
     if user is None or not user.is_active:
         raise unauthorized
+    return user
+
+
+def get_optional_user(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(bearer_scheme_optional)
+    ],
+    db: Annotated[Session, Depends(get_db)],
+) -> User | None:
+    """Returns the current user if a valid token is present, otherwise None."""
+    if credentials is None:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        user_id: str | None = payload.get("sub")
+        if user_id is None:
+            return None
+    except JWTError:
+        return None
+
+    user = UserRepository(db).get_by_id(int(user_id))
+    if user is None or not user.is_active:
+        return None
     return user

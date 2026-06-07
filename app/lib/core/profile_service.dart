@@ -18,6 +18,9 @@ class ProfileService extends ChangeNotifier {
 
   // ── Profile fields ────────────────────────────────────────
 
+  int _userId = 0;
+  int get userId => _userId;
+
   String _username = '';
   String _name = '';
   String _handle = '';
@@ -187,6 +190,7 @@ class ProfileService extends ChangeNotifier {
   Future<void> loadFromBackend() async {
     try {
       final data = await ApiClient.instance.get('/profile/me');
+      _userId = data['id'] ?? 0;
       _username = data['username'] ?? '';
       _name =
           '${data['first_name'] ?? ''} ${data['last_name'] ?? ''}'.trim();

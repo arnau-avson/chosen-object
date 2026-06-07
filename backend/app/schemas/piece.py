@@ -28,10 +28,12 @@ class PieceCreate(BaseModel):
     discipline: str | None = None
     year: str | None = None
     edition: str | None = None
+    description: str | None = None
     price_cents: int
     old_price_cents: int | None = None
     cost_price_cents: int | None = None
     rental: bool = False
+    rental_daily_rate_cents: int | None = None
     stock: int = 1
     ships_to: list[str] | None = None
     packaging: str | None = None
@@ -42,10 +44,12 @@ class PieceUpdate(BaseModel):
     discipline: str | None = None
     year: str | None = None
     edition: str | None = None
+    description: str | None = None
     price_cents: int | None = None
     old_price_cents: int | None = None
     cost_price_cents: int | None = None
     rental: bool | None = None
+    rental_daily_rate_cents: int | None = None
     stock: int | None = None
     ships_to: list[str] | None = None
     packaging: str | None = None
@@ -58,10 +62,12 @@ class PieceOut(BaseModel):
     discipline: str | None = None
     year: str | None = None
     edition: str | None = None
+    description: str | None = None
     price_cents: int
     old_price_cents: int | None = None
     cost_price_cents: int | None = None
     rental: bool
+    rental_daily_rate_cents: int | None = None
     stock: int
     ships_to: list[str] | None = None
     packaging: str | None = None
@@ -85,10 +91,12 @@ class PieceOut(BaseModel):
             discipline=piece.discipline,
             year=piece.year,
             edition=piece.edition,
+            description=piece.description,
             price_cents=piece.price_cents,
             old_price_cents=piece.old_price_cents,
             cost_price_cents=piece.cost_price_cents,
             rental=piece.rental,
+            rental_daily_rate_cents=piece.rental_daily_rate_cents,
             stock=piece.stock,
             ships_to=ships_to_list,
             packaging=piece.packaging,

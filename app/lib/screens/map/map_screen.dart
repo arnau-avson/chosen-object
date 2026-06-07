@@ -1,29 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/app_colors.dart';
-import '../../models/product.dart';
+import '../../core/browse_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
-import '../product_detail/product_detail_screen.dart';
-
-// ── Coordinates for mock locations ──────────────────────────
-final _cityCoords = <String, LatLng>{
-  'Barcelona, ES': LatLng(41.3874, 2.1686),
-  'Madrid, ES': LatLng(40.4168, -3.7038),
-  'Valencia, ES': LatLng(39.4699, -0.3763),
-  'Girona, ES': LatLng(41.9794, 2.8214),
-  'Seville, ES': LatLng(37.3891, -5.9845),
-  'Terrassa, ES': LatLng(41.5630, 2.0089),
-  'Milan, IT': LatLng(45.4642, 9.1900),
-};
-
-// ── Product ↔ Marker key (we store the product id in Marker.key) ──
-final _markerProducts = <Key, Product>{};
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -34,101 +20,29 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final _mapCtrl = MapController();
-  Product? _selected;
+  final _searchController = TextEditingController();
+  bool _loading = true;
+  String? _searchQuery;
 
-  // ── Filter state ──
-  int _selectedType = 0;
-  final Set<int> _selectedCategories = {0};
-  int _selectedSort = 0;
-  RangeValues _priceRange = const RangeValues(0, 1500);
-
-  List<Product> get _filteredProducts {
-    return mockProducts.where((p) {
-      // Type filter
-      if (_selectedType == 1 && p.tag != 'Buy' && p.tag != 'Sell') {
-        return false;
-      }
-      if (_selectedType == 2 && p.tag != 'Rent') return false;
-      if (_selectedType == 3 && p.tag != 'Buy or Rent') return false;
-
-      // Category filter
-      if (!_selectedCategories.contains(0)) {
-        final cats = _MapFiltersModal._categories;
-        final selected =
-            _selectedCategories.map((i) => cats[i].toLowerCase()).toSet();
-        if (p.category != null && !selected.contains(p.category!.toLowerCase())) {
-          return false;
-        }
-      }
-
-      // Price filter
-      final numPrice = double.tryParse(
-              p.price.replaceAll('€', '').replaceAll(',', '').trim()) ??
-          0;
-      if (numPrice < _priceRange.start || numPrice > _priceRange.end) {
-        return false;
-      }
-
-      return true;
-    }).toList();
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
   }
 
-  List<Marker> _buildMarkers() {
-    _markerProducts.clear();
-    final markers = <Marker>[];
-    for (final product in _filteredProducts) {
-      final coords = _cityCoords[product.location];
-      if (coords == null) continue;
-
-      final key = ValueKey(product.id);
-      _markerProducts[key] = product;
-
-      markers.add(
-        Marker(
-          key: key,
-          point: coords,
-          width: 36,
-          height: 36,
-          alignment: Alignment.center,
-          child: GestureDetector(
-            onTap: () => setState(() => _selected = product),
-            child: Container(
-              decoration: BoxDecoration(
-                color: product.verified ? AppColors.ink : AppColors.muted,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.surface, width: 2.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.diamond_outlined,
-                size: 15,
-                color: AppColors.bone,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    return markers;
-  }
-
-  void _navigateToProduct(Product product) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, _, _) =>
-            ProductDetailScreen(productId: product.id),
-        transitionsBuilder: (_, anim, _, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 300),
-      ),
+  Future<void> _loadUsers() async {
+    setState(() => _loading = true);
+    await BrowseService.instance.fetchUsers(
+      search: _searchQuery,
+      limit: 50,
     );
+    if (mounted) setState(() => _loading = false);
   }
+
+  List<BrowseUser> get _users => BrowseService.instance.users;
+
+  List<BrowseUser> get _usersWithLocation =>
+      _users.where((u) => u.city != null || u.country != null).toList();
 
   Future<void> _centerOnMe() async {
     void showMsg(String msg) {
@@ -176,205 +90,212 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _openFilters() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _MapFiltersModal(
-        selectedType: _selectedType,
-        selectedCategories: Set.of(_selectedCategories),
-        selectedSort: _selectedSort,
-        priceRange: _priceRange,
-        onApply: (type, categories, sort, range) {
-          setState(() {
-            _selectedType = type;
-            _selectedCategories
-              ..clear()
-              ..addAll(categories);
-            _selectedSort = sort;
-            _priceRange = range;
-            // Deselect marker if it's filtered out
-            if (_selected != null && !_filteredProducts.contains(_selected)) {
-              _selected = null;
-            }
-          });
-        },
-      ),
-    );
+  void _onSearch(String value) {
+    _searchQuery = value.isEmpty ? null : value;
+    _loadUsers();
   }
 
   @override
   void dispose() {
     _mapCtrl.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final markers = _buildMarkers();
     final size = MediaQuery.of(context).size;
-    final mapWidth = size.width * 0.90;
-    final mapHeight =
-        (size.height - MediaQuery.of(context).padding.top - kToolbarHeight) *
-            0.85;
+    final mapHeight = size.height * 0.35;
 
     return Scaffold(
       backgroundColor: AppColors.bone,
       drawer: const AppDrawer(currentRoute: '/map'),
       appBar: const SharedAppBar(currentRoute: '/map'),
-      body: Stack(
+      body: Column(
         children: [
-          // ── Full layout: map + buttons ──────────────────────────
-          Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: Container(
-                    width: mapWidth,
-                    height: mapHeight,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border:
-                          Border.all(color: AppColors.hairline, width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+          // ── Map area with "coming soon" overlay ──────────────────
+          SizedBox(
+            height: mapHeight,
+            child: Stack(
+              children: [
+                ClipRRect(
+                  child: FlutterMap(
+                    mapController: _mapCtrl,
+                    options: MapOptions(
+                      initialCenter: LatLng(41.3874, 2.1686),
+                      initialZoom: 5.5,
+                      minZoom: 3,
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: FlutterMap(
-                        mapController: _mapCtrl,
-                        options: MapOptions(
-                          initialCenter: LatLng(40.4, -1.5),
-                          initialZoom: 5.8,
-                          minZoom: 3,
-                          onTap: (_, _) =>
-                              setState(() => _selected = null),
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                            subdomains: const ['a', 'b', 'c', 'd'],
-                            userAgentPackageName: 'com.chosenobject.app',
-                            maxZoom: 19,
-                          ),
-                          MarkerClusterLayerWidget(
-                            options: MarkerClusterLayerOptions(
-                              maxClusterRadius: 60,
-                              size: const Size(44, 44),
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.all(50),
-                              maxZoom: 15,
-                              showPolygon: false,
-                              markers: markers,
-                              builder: (context, clusterMarkers) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    color: AppColors.ink,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: AppColors.surface,
-                                        width: 2.5),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.20),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      clusterMarkers.length.toString(),
-                                      style: GoogleFonts.inter(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.bone,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                        subdomains: const ['a', 'b', 'c', 'd'],
+                        userAgentPackageName: 'com.chosenobject.app',
+                        maxZoom: 19,
+                      ),
+                    ],
+                  ),
+                ),
+                // Overlay
+                Positioned.fill(
+                  child: Container(
+                    color: AppColors.bone.withValues(alpha: 0.55),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border:
+                              Border.all(color: AppColors.hairline, width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 28,
+                              color: AppColors.muted,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Map pins coming soon',
+                              style: GoogleFonts.fraunces(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.inkStrong,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Studio locations will appear here',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                color: AppColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-
-              // ── Buttons ─────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _FloatingButton(
-                      icon: Icons.my_location_rounded,
-                      label: 'Center',
-                      onTap: _centerOnMe,
-                    ),
-                    const SizedBox(width: 12),
-                    _FloatingButton(
-                      icon: Icons.tune_rounded,
-                      label: 'Filters',
-                      onTap: _openFilters,
-                      badge: _hasActiveFilters ? '' : null,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
 
-          // ── Product preview (fixed overlay at bottom, animated) ──
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 16,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 280),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) {
-                final slide = Tween<Offset>(
-                  begin: const Offset(0, 0.3),
-                  end: Offset.zero,
-                ).animate(animation);
-                return SlideTransition(
-                  position: slide,
-                  child: FadeTransition(opacity: animation, child: child),
-                );
-              },
-              child: _selected != null
-                  ? _ProductPreviewCard(
-                      key: ValueKey(_selected!.id),
-                      product: _selected!,
-                      onView: () => _navigateToProduct(_selected!),
-                      onClose: () => setState(() => _selected = null),
-                    )
-                  : const SizedBox.shrink(),
+          // ── Center button ───────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: _FloatingButton(
+              icon: Icons.my_location_rounded,
+              label: 'Center on me',
+              onTap: _centerOnMe,
             ),
+          ),
+
+          // ── Search bar ──────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.hairline, width: 1),
+              ),
+              child: TextField(
+                controller: _searchController,
+                onSubmitted: _onSearch,
+                style: GoogleFonts.inter(
+                  fontSize: 13.5,
+                  color: AppColors.inkStrong,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search studios by name or city...',
+                  hintStyle: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    color: AppColors.muted,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: AppColors.muted,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Studios list ────────────────────────────────────────
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.ink,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : _usersWithLocation.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: _usersWithLocation.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (_, index) {
+                          return _StudioCard(user: _usersWithLocation[index]);
+                        },
+                      ),
           ),
         ],
       ),
     );
   }
 
-  bool get _hasActiveFilters =>
-      _selectedType != 0 ||
-      !_selectedCategories.contains(0) ||
-      _selectedCategories.length > 1 ||
-      _priceRange.start > 0 ||
-      _priceRange.end < 1500;
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.storefront_outlined,
+            size: 40,
+            color: AppColors.muted,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No studios found',
+            style: GoogleFonts.fraunces(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: AppColors.inkStrong,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Try adjusting your search',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: AppColors.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Floating action button ──────────────────────────────────────
@@ -383,496 +304,200 @@ class _FloatingButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final String? badge;
 
   const _FloatingButton({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.badge,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.hairline, width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.hairline, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 17, color: AppColors.inkSoft),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.inkSoft,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (badge != null)
-            Positioned(
-              top: -2,
-              right: -2,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: AppColors.accent,
-                  shape: BoxShape.circle,
-                ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: AppColors.inkSoft),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.inkSoft,
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Product preview card ────────────────────────────────────────
+// ── Studio card ─────────────────────────────────────────────────
 
-class _ProductPreviewCard extends StatelessWidget {
-  final Product product;
-  final VoidCallback onView;
-  final VoidCallback onClose;
+class _StudioCard extends StatelessWidget {
+  final BrowseUser user;
 
-  const _ProductPreviewCard({
-    super.key,
-    required this.product,
-    required this.onView,
-    required this.onClose,
-  });
+  const _StudioCard({required this.user});
 
   @override
   Widget build(BuildContext context) {
+    final location = [user.city, user.country]
+        .where((s) => s != null && s.isNotEmpty)
+        .join(', ');
+
     return Container(
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.hairline, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
-            child: Row(
+          // ── Avatar ──
+          _buildAvatar(),
+          const SizedBox(width: 14),
+
+          // ── Info ──
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Thumbnail ──
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: product.images.first,
-                    borderRadius: BorderRadius.circular(8),
+                Text(
+                  user.studioName ?? user.username,
+                  style: GoogleFonts.fraunces(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.inkStrong,
                   ),
                 ),
-                const SizedBox(width: 14),
-
-                // ── Info ──
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product.name,
-                        style: GoogleFonts.fraunces(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.inkStrong,
-                        ),
+                if (user.studioName != null) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    '@${user.username}',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (location.isNotEmpty) ...[
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 13,
+                        color: AppColors.muted,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${product.designer} · ${product.year}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          color: AppColors.muted,
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          location,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.inkSoft,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Text(
-                            product.price,
-                            style: GoogleFonts.inter(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.inkStrong,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.ink.withValues(alpha: 0.78),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              product.tag,
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.bone,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
+                  ],
+                ),
+                if (user.discipline != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    user.discipline!,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
-                ),
-
-                // ── Close ──
-                IconButton(
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close_rounded, size: 16),
-                  color: AppColors.muted,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  visualDensity: VisualDensity.compact,
-                ),
+                ],
               ],
             ),
           ),
 
-          // ── View button ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-            child: SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: FilledButton(
-                onPressed: onView,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.ink,
-                  foregroundColor: AppColors.bone,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  textStyle: GoogleFonts.inter(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                child: const Text('View product'),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Map filters modal ───────────────────────────────────────────
-
-class _MapFiltersModal extends StatefulWidget {
-  final int selectedType;
-  final Set<int> selectedCategories;
-  final int selectedSort;
-  final RangeValues priceRange;
-  final void Function(int type, Set<int> categories, int sort, RangeValues range)
-      onApply;
-
-  static const _categories = [
-    'All',
-    'Painting',
-    'Sculpture',
-    'Furniture',
-    'Lighting',
-    'Watercolour',
-    'Ceramic',
-    'Decor',
-    'Textiles',
-    'Mixed media',
-  ];
-
-  const _MapFiltersModal({
-    required this.selectedType,
-    required this.selectedCategories,
-    required this.selectedSort,
-    required this.priceRange,
-    required this.onApply,
-  });
-
-  @override
-  State<_MapFiltersModal> createState() => _MapFiltersModalState();
-}
-
-class _MapFiltersModalState extends State<_MapFiltersModal> {
-  static const _types = ['All', 'Buy', 'Rent', 'Buy or Rent'];
-  static const _sortOptions = ['Relevance', 'Price ↑', 'Price ↓', 'Newest'];
-
-  late int _selectedType = widget.selectedType;
-  late final Set<int> _selectedCategories = Set.of(widget.selectedCategories);
-  late int _selectedSort = widget.selectedSort;
-  late RangeValues _priceRange = widget.priceRange;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Handle bar
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.hairline,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Header
-          Row(
+          // ── Pieces count badge ──
+          Column(
             children: [
               Text(
-                'Filters',
-                style: GoogleFonts.fraunces(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w400,
+                user.piecesCount.toString(),
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.inkStrong,
                 ),
               ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: const Icon(
-                  Icons.close_rounded,
-                  size: 20,
+              Text(
+                'pieces',
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
                   color: AppColors.muted,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Container(height: 1, color: AppColors.hairline),
-
-          // ── Scrollable filter content ──
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── Type section ──
-                  const SizedBox(height: 20),
-                  _sectionLabel('TYPE'),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 10,
-                    children: List.generate(_types.length, (i) {
-                      return _chip(
-                        label: _types[i],
-                        active: _selectedType == i,
-                        onTap: () => setState(() => _selectedType = i),
-                      );
-                    }),
-                  ),
-
-                  // ── Price range section ──
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      _sectionLabel('PRICE RANGE'),
-                      const Spacer(),
-                      Text(
-                        '€${_priceRange.start.round()} – €${_priceRange.end.round()}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.inkSoft,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  SliderTheme(
-                    data: SliderThemeData(
-                      activeTrackColor: AppColors.ink,
-                      inactiveTrackColor: AppColors.hairline,
-                      thumbColor: AppColors.ink,
-                      overlayColor: AppColors.ink.withValues(alpha: 0.08),
-                      trackHeight: 2,
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 7),
-                      rangeThumbShape: const RoundRangeSliderThumbShape(
-                          enabledThumbRadius: 7),
-                    ),
-                    child: RangeSlider(
-                      values: _priceRange,
-                      min: 0,
-                      max: 3000,
-                      divisions: 60,
-                      onChanged: (v) => setState(() => _priceRange = v),
-                    ),
-                  ),
-
-                  // ── Sort section ──
-                  const SizedBox(height: 20),
-                  _sectionLabel('SORT BY'),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 10,
-                    children: List.generate(_sortOptions.length, (i) {
-                      return _chip(
-                        label: _sortOptions[i],
-                        active: _selectedSort == i,
-                        onTap: () => setState(() => _selectedSort = i),
-                      );
-                    }),
-                  ),
-
-                  // ── Category section ──
-                  const SizedBox(height: 24),
-                  _sectionLabel('CATEGORY'),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 10,
-                    children: List.generate(
-                        _MapFiltersModal._categories.length, (i) {
-                      final active = _selectedCategories.contains(i);
-                      return _chip(
-                        label: _MapFiltersModal._categories[i],
-                        active: active,
-                        onTap: () {
-                          setState(() {
-                            if (i == 0) {
-                              _selectedCategories
-                                ..clear()
-                                ..add(0);
-                            } else {
-                              _selectedCategories.remove(0);
-                              if (active) {
-                                _selectedCategories.remove(i);
-                                if (_selectedCategories.isEmpty) {
-                                  _selectedCategories.add(0);
-                                }
-                              } else {
-                                _selectedCategories.add(i);
-                              }
-                            }
-                          });
-                        },
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 28),
-                ],
-              ),
-            ),
-          ),
-
-          // Apply button
-          GestureDetector(
-            onTap: () {
-              widget.onApply(
-                _selectedType,
-                _selectedCategories,
-                _selectedSort,
-                _priceRange,
-              );
-              Navigator.of(context).pop();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              decoration: BoxDecoration(
-                color: AppColors.ink,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                'Apply filters',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.bone,
-                  letterSpacing: 0.1,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _sectionLabel(String text) => Text(
-        text,
-        style: GoogleFonts.inter(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: AppColors.muted,
-          letterSpacing: 1.4,
+  Widget _buildAvatar() {
+    if (user.avatarType == 'image' && user.avatarImageB64 != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: Image.memory(
+          base64Decode(user.avatarImageB64!),
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
         ),
       );
+    }
 
-  Widget _chip({
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        decoration: BoxDecoration(
-          color: active ? AppColors.ink : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: active ? AppColors.ink : AppColors.hairline,
-            width: 1,
-          ),
-        ),
+    // Color avatar with initial
+    Color avatarColor;
+    try {
+      avatarColor = Color(
+        int.parse(user.avatarColor.replaceFirst('#', '0xFF')),
+      );
+    } catch (_) {
+      avatarColor = AppColors.ink;
+    }
+
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: avatarColor,
+        shape: BoxShape.circle,
+      ),
+      child: Center(
         child: Text(
-          label,
+          (user.studioName ?? user.username).substring(0, 1).toUpperCase(),
           style: GoogleFonts.inter(
-            fontSize: 12.5,
-            fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-            color: active ? AppColors.bone : AppColors.inkSoft,
-            letterSpacing: 0.1,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.bone,
           ),
         ),
       ),

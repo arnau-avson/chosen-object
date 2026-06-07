@@ -1,8 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/follow_service.dart';
-import '../../models/user_profile.dart';
+import '../../widgets/loading_spinner.dart';
 import '../../widgets/shared_app_bar.dart';
 import 'user_profile_screen.dart';
 
@@ -11,7 +13,7 @@ import 'user_profile_screen.dart';
 // ═════════════════════════════════════════════════════════════
 
 class FollowersScreen extends StatefulWidget {
-  final String userId;
+  final int userId;
   final int initialTab;
 
   const FollowersScreen({
@@ -28,6 +30,14 @@ class _FollowersScreenState extends State<FollowersScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
   late int _activeTab;
+
+  List<FollowUser> _followers = [];
+  List<FollowUser> _following = [];
+  bool _loadingFollowers = true;
+  bool _loadingFollowing = true;
+
+  int _followerCount = 0;
+  int _followingCount = 0;
 
   // ── Animation helpers ──────────────────────────────────────
 
@@ -54,6 +64,35 @@ class _FollowersScreenState extends State<FollowersScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final fs = FollowService.instance;
+
+    // Load counts
+    final counts = await fs.fetchCounts(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _followerCount = counts['followers'] ?? 0;
+      _followingCount = counts['following'] ?? 0;
+    });
+
+    // Load followers
+    final followers = await fs.getFollowers(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _followers = followers;
+      _loadingFollowers = false;
+    });
+
+    // Load following
+    final following = await fs.getFollowing(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _following = following;
+      _loadingFollowing = false;
+    });
   }
 
   @override
@@ -62,10 +101,10 @@ class _FollowersScreenState extends State<FollowersScreen>
     super.dispose();
   }
 
-  void _openProfile(String userId) {
+  void _openProfile(int userId) {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => UserProfileScreen(userId: userId),
+        pageBuilder: (_, _, _) => UserProfileScreen(userId: userId.toString()),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 300),
@@ -83,10 +122,6 @@ class _FollowersScreenState extends State<FollowersScreen>
       body: ListenableBuilder(
         listenable: FollowService.instance,
         builder: (context, _) {
-          final fs = FollowService.instance;
-          final followers = fs.getFollowers(widget.userId);
-          final following = fs.getFollowing(widget.userId);
-
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -98,9 +133,7 @@ class _FollowersScreenState extends State<FollowersScreen>
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                     child: Text(
-                      widget.userId == 'me'
-                          ? 'Your connections'
-                          : _resolveUserName(widget.userId),
+                      'Connections',
                       style: GoogleFonts.fraunces(
                         fontSize: 28,
                         fontWeight: FontWeight.w400,
@@ -124,14 +157,14 @@ class _FollowersScreenState extends State<FollowersScreen>
                       children: [
                         _TabLabel(
                           label: 'Followers',
-                          count: fs.followerCount(widget.userId),
+                          count: _followerCount,
                           active: _activeTab == 0,
                           onTap: () => setState(() => _activeTab = 0),
                         ),
                         const SizedBox(width: 24),
                         _TabLabel(
                           label: 'Following',
-                          count: fs.followingCount(widget.userId),
+                          count: _followingCount,
                           active: _activeTab == 1,
                           onTap: () => setState(() => _activeTab = 1),
                         ),
@@ -152,22 +185,30 @@ class _FollowersScreenState extends State<FollowersScreen>
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
                   child: _activeTab == 0
-                      ? _UserList(
-                          key: const ValueKey('followers'),
-                          users: followers,
-                          currentUserId: widget.userId,
-                          onTapUser: _openProfile,
-                          fade: _fade,
-                          slide: _slide,
-                        )
-                      : _UserList(
-                          key: const ValueKey('following'),
-                          users: following,
-                          currentUserId: widget.userId,
-                          onTapUser: _openProfile,
-                          fade: _fade,
-                          slide: _slide,
-                        ),
+                      ? _loadingFollowers
+                          ? const Center(
+                              key: ValueKey('loading-followers'),
+                              child: LoadingSpinner(),
+                            )
+                          : _UserList(
+                              key: const ValueKey('followers'),
+                              users: _followers,
+                              onTapUser: _openProfile,
+                              fade: _fade,
+                              slide: _slide,
+                            )
+                      : _loadingFollowing
+                          ? const Center(
+                              key: ValueKey('loading-following'),
+                              child: LoadingSpinner(),
+                            )
+                          : _UserList(
+                              key: const ValueKey('following'),
+                              users: _following,
+                              onTapUser: _openProfile,
+                              fade: _fade,
+                              slide: _slide,
+                            ),
                 ),
               ),
             ],
@@ -175,14 +216,6 @@ class _FollowersScreenState extends State<FollowersScreen>
         },
       ),
     );
-  }
-
-  String _resolveUserName(String userId) {
-    try {
-      return findProfileById(userId).name;
-    } catch (_) {
-      return userId;
-    }
   }
 }
 
@@ -240,16 +273,14 @@ class _TabLabel extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════
 
 class _UserList extends StatelessWidget {
-  final List<UserProfile> users;
-  final String currentUserId;
-  final void Function(String userId) onTapUser;
+  final List<FollowUser> users;
+  final void Function(int userId) onTapUser;
   final Animation<double> Function(double, double) fade;
   final Animation<Offset> Function(double, double) slide;
 
   const _UserList({
     super.key,
     required this.users,
-    required this.currentUserId,
     required this.onTapUser,
     required this.fade,
     required this.slide,
@@ -307,20 +338,28 @@ class _UserList extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════
 
 class _UserRow extends StatelessWidget {
-  final UserProfile user;
+  final FollowUser user;
   final VoidCallback onTap;
 
   const _UserRow({required this.user, required this.onTap});
 
+  Color _parseColor(String hex) {
+    final cleaned = hex.replaceFirst('#', '');
+    final value = int.tryParse(cleaned, radix: 16) ?? 0x2E2520;
+    return Color(0xFF000000 | value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final initials = user.name
+    final displayName = user.studioName ?? user.username;
+    final initials = displayName
         .split(' ')
         .where((w) => w.isNotEmpty)
         .map((w) => w[0])
         .take(2)
         .join();
     final isFollowing = FollowService.instance.isFollowing(user.id);
+    final avatarColor = _parseColor(user.avatarColor);
 
     return GestureDetector(
       onTap: onTap,
@@ -335,48 +374,52 @@ class _UserRow extends StatelessWidget {
               height: 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: user.avatarColor,
+                color: avatarColor,
               ),
               alignment: Alignment.center,
-              child: Text(
-                initials,
-                style: GoogleFonts.fraunces(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-              ),
+              child: user.avatarImageB64 != null
+                  ? ClipOval(
+                      child: Image.memory(
+                        base64Decode(user.avatarImageB64!),
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Text(
+                      initials,
+                      style: GoogleFonts.fraunces(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
             ),
             const SizedBox(width: 14),
 
-            // Name + handle
+            // Name + subtitle
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          user.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.inkSoft,
-                          ),
-                        ),
-                      ),
-                      if (user.verified) ...[
-                        const SizedBox(width: 4),
-                        Icon(Icons.verified, size: 14, color: AppColors.sage),
-                      ],
-                    ],
+                  Text(
+                    displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkSoft,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    user.handle,
+                    [
+                      '@${user.username}',
+                      if (user.discipline != null) user.discipline!,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,

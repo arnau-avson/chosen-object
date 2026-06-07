@@ -1,13 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/collection_service.dart';
-import '../../models/product.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/save_to_collection_modal.dart';
 import '../../widgets/shared_app_bar.dart';
-import '../product_detail/product_detail_screen.dart';
 
 // ═════════════════════════════════════════════════════════════
 // ── Collection Screen ───────────────────────────────────────
@@ -51,6 +51,9 @@ class _CollectionScreenState extends State<CollectionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    // Fetch data from API
+    CollectionService.instance.fetchSavedPieces();
+    CollectionService.instance.fetchCollections();
   }
 
   @override
@@ -62,11 +65,11 @@ class _CollectionScreenState extends State<CollectionScreen>
   void _openCollection(SavedCollection col) {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => _CollectionDetailScreen(
+        pageBuilder: (_, __, ___) => _CollectionDetailScreen(
           title: col.name,
           collectionId: col.id,
         ),
-        transitionsBuilder: (_, animation, _, child) =>
+        transitionsBuilder: (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 300),
       ),
@@ -203,7 +206,7 @@ class _CollectionScreenState extends State<CollectionScreen>
         listenable: CollectionService.instance,
         builder: (context, _) {
           final service = CollectionService.instance;
-          final savedIds = service.allSavedProductIds;
+          final savedPieces = service.savedPieces;
           final collections = service.collections;
 
           return SingleChildScrollView(
@@ -265,7 +268,7 @@ class _CollectionScreenState extends State<CollectionScreen>
                   child: _tabIndex == 0
                       ? _PiecesTab(
                           key: const ValueKey('pieces'),
-                          savedIds: savedIds,
+                          savedPieces: savedPieces,
                           fade: _fade,
                           slide: _slide,
                         )
@@ -339,20 +342,20 @@ class _TabLabel extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════
 
 class _PiecesTab extends StatelessWidget {
-  final Set<String> savedIds;
+  final List<SavedPiece> savedPieces;
   final Animation<double> Function(double, double) fade;
   final Animation<Offset> Function(double, double) slide;
 
   const _PiecesTab({
     super.key,
-    required this.savedIds,
+    required this.savedPieces,
     required this.fade,
     required this.slide,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (savedIds.isEmpty) {
+    if (savedPieces.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 48),
         child: Center(
@@ -386,14 +389,11 @@ class _PiecesTab extends StatelessWidget {
       );
     }
 
-    final products =
-        mockProducts.where((p) => savedIds.contains(p.id)).toList();
-
     return FadeTransition(
       opacity: fade(0.12, 0.55),
       child: SlideTransition(
         position: slide(0.12, 0.55),
-        child: _ProductGrid(products: products),
+        child: _SavedPieceGrid(pieces: savedPieces),
       ),
     );
   }
@@ -532,18 +532,6 @@ class _CollectionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use cover color, or first product's image color, or fallback
-    Color cardColor = collection.coverColor ?? AppColors.hairline2;
-    if (collection.coverColor == null &&
-        collection.productIds.isNotEmpty) {
-      final first = mockProducts
-          .where((p) => p.id == collection.productIds.first)
-          .firstOrNull;
-      if (first != null && first.images.isNotEmpty) {
-        cardColor = first.images.first;
-      }
-    }
-
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -557,7 +545,7 @@ class _CollectionRow extends StatelessWidget {
               child: Container(
                 width: 56,
                 height: 56,
-                color: cardColor,
+                color: AppColors.hairline2,
               ),
             ),
             const SizedBox(width: 14),
@@ -578,7 +566,7 @@ class _CollectionRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${collection.productIds.length} pieces',
+                    '${collection.pieceCount} pieces',
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
@@ -603,7 +591,7 @@ class _CollectionRow extends StatelessWidget {
 
 class _CollectionDetailScreen extends StatefulWidget {
   final String title;
-  final String? collectionId; // null = "All Saved"
+  final int collectionId;
 
   const _CollectionDetailScreen({
     required this.title,
@@ -623,6 +611,8 @@ class _CollectionDetailScreenState
   static const _pageSize = 4;
   int _displayedCount = _pageSize;
   bool _loading = false;
+  List<SavedPiece> _pieces = [];
+  bool _fetching = true;
 
   Animation<double> _fade(double start, double end) => CurvedAnimation(
         parent: _anim,
@@ -647,26 +637,23 @@ class _CollectionDetailScreenState
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _fetchPieces();
+  }
+
+  Future<void> _fetchPieces() async {
+    final detail = await CollectionService.instance
+        .fetchCollectionDetail(widget.collectionId);
+    if (!mounted) return;
+    setState(() {
+      _pieces = detail?.pieces ?? [];
+      _fetching = false;
+    });
   }
 
   @override
   void dispose() {
     _anim.dispose();
     super.dispose();
-  }
-
-  List<Product> _getProducts() {
-    final service = CollectionService.instance;
-    final Set<String> ids;
-    if (widget.collectionId == null) {
-      ids = service.allSavedProductIds;
-    } else {
-      final col = service.collections
-          .where((c) => c.id == widget.collectionId)
-          .firstOrNull;
-      ids = col?.productIds.toSet() ?? {};
-    }
-    return mockProducts.where((p) => ids.contains(p.id)).toList();
   }
 
   Future<void> _loadMore(int total) async {
@@ -685,17 +672,21 @@ class _CollectionDetailScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bone,
-      appBar: SharedAppBar(
+      appBar: const SharedAppBar(
         currentRoute: '/collection',
         showBack: true,
       ),
       body: ListenableBuilder(
         listenable: CollectionService.instance,
         builder: (context, _) {
-          final products = _getProducts();
+          if (_fetching) {
+            return const Center(child: LoadingSpinner());
+          }
+
+          final pieces = _pieces;
           final displayed =
-              products.take(_displayedCount).toList();
-          final hasMore = _displayedCount < products.length;
+              pieces.take(_displayedCount).toList();
+          final hasMore = _displayedCount < pieces.length;
 
           return SingleChildScrollView(
             child: Column(
@@ -723,7 +714,7 @@ class _CollectionDetailScreenState
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${products.length} pieces',
+                            '${pieces.length} pieces',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w400,
@@ -738,7 +729,7 @@ class _CollectionDetailScreenState
 
                 const SizedBox(height: 20),
 
-                if (products.isEmpty)
+                if (pieces.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 48),
@@ -759,8 +750,8 @@ class _CollectionDetailScreenState
                     opacity: _fade(0.10, 0.55),
                     child: SlideTransition(
                       position: _slide(0.10, 0.55),
-                      child: _ProductGrid(
-                          products: displayed),
+                      child: _SavedPieceGrid(
+                          pieces: displayed),
                     ),
                   ),
 
@@ -780,7 +771,7 @@ class _CollectionDetailScreenState
                             const EdgeInsets.only(bottom: 32),
                         child: GestureDetector(
                           onTap: () =>
-                              _loadMore(products.length),
+                              _loadMore(pieces.length),
                           child: Container(
                             padding:
                                 const EdgeInsets.symmetric(
@@ -818,12 +809,12 @@ class _CollectionDetailScreenState
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── Product grid ────────────────────────────────────────────
+// ── SavedPiece grid ─────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
-class _ProductGrid extends StatelessWidget {
-  final List<Product> products;
-  const _ProductGrid({required this.products});
+class _SavedPieceGrid extends StatelessWidget {
+  final List<SavedPiece> pieces;
+  const _SavedPieceGrid({required this.pieces});
 
   @override
   Widget build(BuildContext context) {
@@ -832,7 +823,7 @@ class _ProductGrid extends StatelessWidget {
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: products.length,
+        itemCount: pieces.length,
         gridDelegate:
             const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -841,115 +832,44 @@ class _ProductGrid extends StatelessWidget {
           childAspectRatio: 0.58,
         ),
         itemBuilder: (_, i) =>
-            _ProductCard(product: products[i]),
+            _SavedPieceCard(piece: pieces[i]),
       ),
     );
   }
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── Product card ────────────────────────────────────────────
+// ── SavedPiece card ─────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
-class _ProductCard extends StatefulWidget {
-  final Product product;
-  const _ProductCard({required this.product});
-
-  @override
-  State<_ProductCard> createState() => _ProductCardState();
-}
-
-class _ProductCardState extends State<_ProductCard> {
-  int _currentPage = 0;
-
-  void _openDetail() {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, _, _) =>
-            ProductDetailScreen(productId: widget.product.id),
-        transitionsBuilder: (_, animation, _, child) =>
-            FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 300),
-      ),
-    );
-  }
+class _SavedPieceCard extends StatelessWidget {
+  final SavedPiece piece;
+  const _SavedPieceCard({required this.piece});
 
   @override
   Widget build(BuildContext context) {
-    final images = widget.product.images;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ── Image area ──
         Expanded(
-          child: GestureDetector(
-            onTap: _openDetail,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Stack(
-                children: [
-                  PageView.builder(
-                    itemCount: images.length,
-                    onPageChanged: (p) =>
-                        setState(() => _currentPage = p),
-                    itemBuilder: (_, i) =>
-                        Container(color: images[i]),
-                  ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface
-                            .withValues(alpha: 0.78),
-                        borderRadius:
-                            BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        widget.product.tag,
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.inkSoft,
-                          letterSpacing: 0.3,
-                        ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              width: double.infinity,
+              color: AppColors.hairline2,
+              child: piece.coverImageB64 != null
+                  ? Image.memory(
+                      base64Decode(piece.coverImageB64!),
+                      fit: BoxFit.cover,
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.image_outlined,
+                        size: 32,
+                        color: AppColors.muted,
                       ),
                     ),
-                  ),
-                  if (images.length > 1)
-                    Positioned(
-                      bottom: 10,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
-                        children:
-                            List.generate(images.length, (i) {
-                          final active = i == _currentPage;
-                          return AnimatedContainer(
-                            duration:
-                                const Duration(milliseconds: 200),
-                            width: active ? 6 : 5,
-                            height: active ? 6 : 5,
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 3),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: active
-                                  ? Colors.white
-                                  : Colors.white
-                                      .withValues(alpha: 0.45),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                ],
-              ),
             ),
           ),
         ),
@@ -957,29 +877,27 @@ class _ProductCardState extends State<_ProductCard> {
         const SizedBox(height: 10),
 
         // ── Info + save icon ──
-        GestureDetector(
-          onTap: _openDetail,
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.product.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkStrong,
-                      ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    piece.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkStrong,
                     ),
+                  ),
+                  if (piece.discipline != null) ...[
                     const SizedBox(height: 2),
                     Text(
-                      '${widget.product.designer} · ${widget.product.year}',
+                      piece.discipline!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
@@ -988,56 +906,65 @@ class _ProductCardState extends State<_ProductCard> {
                         color: AppColors.muted,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.product.price,
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkSoft,
-                      ),
-                    ),
                   ],
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatPrice(piece.priceCents),
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                ],
               ),
-              ListenableBuilder(
-                listenable: CollectionService.instance,
-                builder: (context, _) {
-                  final saved = CollectionService.instance
-                      .isProductSaved(widget.product.id);
-                  return GestureDetector(
-                    onTap: () => CollectionService.instance
-                        .toggleSaved(widget.product.id),
-                    onLongPress: () => SaveToCollectionModal.show(
-                        context, widget.product.id),
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.only(left: 4, top: 1),
-                      child: AnimatedSwitcher(
-                        duration:
-                            const Duration(milliseconds: 200),
-                        transitionBuilder: (child, anim) =>
-                            ScaleTransition(
-                                scale: anim, child: child),
-                        child: Icon(
-                          saved
-                              ? Icons.bookmark_rounded
-                              : Icons.bookmark_border_rounded,
-                          key: ValueKey(saved),
-                          size: 18,
-                          color: saved
-                              ? AppColors.accent
-                              : AppColors.muted,
-                        ),
+            ),
+            ListenableBuilder(
+              listenable: CollectionService.instance,
+              builder: (context, _) {
+                final saved = CollectionService.instance
+                    .isProductSaved(piece.id);
+                return GestureDetector(
+                  onTap: () => CollectionService.instance
+                      .toggleSaved(piece.id),
+                  onLongPress: () => SaveToCollectionModal.show(
+                      context, piece.id),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.only(left: 4, top: 1),
+                    child: AnimatedSwitcher(
+                      duration:
+                          const Duration(milliseconds: 200),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(
+                              scale: anim, child: child),
+                      child: Icon(
+                        saved
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        key: ValueKey(saved),
+                        size: 18,
+                        color: saved
+                            ? AppColors.accent
+                            : AppColors.muted,
                       ),
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ],
     );
+  }
+
+  String _formatPrice(int cents) {
+    final euros = cents ~/ 100;
+    final remainder = cents % 100;
+    if (remainder == 0) {
+      return '\u20AC$euros';
+    }
+    return '\u20AC$euros.${remainder.toString().padLeft(2, '0')}';
   }
 }

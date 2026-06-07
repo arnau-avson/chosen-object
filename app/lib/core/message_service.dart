@@ -1,318 +1,236 @@
 import 'package:flutter/foundation.dart';
 
-// ── ChatMessage model ───────────────────────────────────────
+import 'api_client.dart';
+
+// ═════════════════════════════════════════════════════════════
+// ── MessageService (singleton ChangeNotifier) ─────────────────
+// ═════════════════════════════════════════════════════════════
 
 class ChatMessage {
-  final String id;
-  final String senderId; // UserProfile.id or 'me'
+  final int id;
+  final int conversationId;
+  final int senderId;
+  final String? senderUsername;
   final String text;
-  final DateTime timestamp;
-  String? reaction;
-  final String? replyToId;
+  final int? replyToId;
+  final String? reaction;
+  final DateTime createdAt;
 
   ChatMessage({
     required this.id,
+    required this.conversationId,
     required this.senderId,
+    this.senderUsername,
     required this.text,
-    required this.timestamp,
-    this.reaction,
     this.replyToId,
+    this.reaction,
+    required this.createdAt,
   });
+
+  factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
+        id: j['id'] as int,
+        conversationId: j['conversation_id'] as int,
+        senderId: j['sender_id'] as int,
+        senderUsername: j['sender_username'] as String?,
+        text: j['text'] as String,
+        replyToId: j['reply_to_id'] as int?,
+        reaction: j['reaction'] as String?,
+        createdAt: DateTime.parse(j['created_at'] as String),
+      );
 }
 
-// ── Conversation model ──────────────────────────────────────
-
 class Conversation {
-  final String id;
-  final String participantId;
-  final List<ChatMessage> messages;
-  bool isRead;
-  bool isRequest;
-  bool requestAccepted;
+  final int id;
+  final int otherUserId;
+  final String? otherUsername;
+  final String otherAvatarType;
+  final String otherAvatarColor;
+  final String? otherAvatarImageB64;
+  final String? lastMessage;
+  final DateTime? lastMessageAt;
+  final int unreadCount;
+  final bool isRequest;
+  final bool requestAccepted;
+  final DateTime updatedAt;
 
   Conversation({
     required this.id,
-    required this.participantId,
-    required this.messages,
-    this.isRead = false,
+    required this.otherUserId,
+    this.otherUsername,
+    this.otherAvatarType = 'color',
+    this.otherAvatarColor = '#2E2520',
+    this.otherAvatarImageB64,
+    this.lastMessage,
+    this.lastMessageAt,
+    this.unreadCount = 0,
     this.isRequest = false,
     this.requestAccepted = false,
+    required this.updatedAt,
   });
 
-  ChatMessage get lastMessage => messages.last;
-  DateTime get lastTimestamp => lastMessage.timestamp;
-
-  String get lastMessagePreview {
-    final t = lastMessage.text;
-    return t.length > 60 ? '${t.substring(0, 60)}...' : t;
-  }
+  factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
+        id: j['id'] as int,
+        otherUserId: j['other_user_id'] as int,
+        otherUsername: j['other_username'] as String?,
+        otherAvatarType: j['other_avatar_type'] as String? ?? 'color',
+        otherAvatarColor: j['other_avatar_color'] as String? ?? '#2E2520',
+        otherAvatarImageB64: j['other_avatar_image_b64'] as String?,
+        lastMessage: j['last_message'] as String?,
+        lastMessageAt: j['last_message_at'] != null
+            ? DateTime.parse(j['last_message_at'] as String)
+            : null,
+        unreadCount: j['unread_count'] as int? ?? 0,
+        isRequest: j['is_request'] as bool? ?? false,
+        requestAccepted: j['request_accepted'] as bool? ?? false,
+        updatedAt: DateTime.parse(j['updated_at'] as String),
+      );
 }
-
-// ── MessageService (singleton ChangeNotifier) ───────────────
 
 class MessageService extends ChangeNotifier {
   static final MessageService _instance = MessageService._();
   static MessageService get instance => _instance;
+  MessageService._();
 
-  MessageService._() {
-    _conversations = _buildMockConversations();
+  List<Conversation> _conversations = [];
+  List<Conversation> _requests = [];
+
+  List<Conversation> get accepted => _conversations;
+  List<Conversation> get requests => _requests;
+
+  int _unreadCount = 0;
+  int get unreadCount => _unreadCount;
+  int get requestCount => _requests.length;
+
+  bool _loading = false;
+  bool get loading => _loading;
+
+  /// Fetch conversations.
+  Future<void> fetchConversations({int offset = 0, int limit = 20}) async {
+    _loading = true;
+    notifyListeners();
+
+    try {
+      final data = await ApiClient.instance
+          .get('/messages/conversations?requests=false&offset=$offset&limit=$limit');
+      _conversations = (data as List)
+          .map((j) => Conversation.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      // keep existing
+    }
+
+    _loading = false;
+    notifyListeners();
   }
 
-  late final List<Conversation> _conversations;
-
-  /// Accepted conversations (not a request, or request already accepted),
-  /// sorted by most recent first.
-  List<Conversation> get accepted {
-    final list = _conversations
-        .where((c) => !c.isRequest || c.requestAccepted)
-        .toList();
-    list.sort((a, b) => b.lastTimestamp.compareTo(a.lastTimestamp));
-    return list;
-  }
-
-  /// Pending requests (not yet accepted).
-  List<Conversation> get requests =>
-      _conversations.where((c) => c.isRequest && !c.requestAccepted).toList();
-
-  int get unreadCount =>
-      accepted.where((c) => !c.isRead).length;
-
-  int get requestCount => requests.length;
-
-  Conversation findById(String id) =>
-      _conversations.firstWhere((c) => c.id == id);
-
-  void markAsRead(String conversationId) {
-    final conv = findById(conversationId);
-    if (!conv.isRead) {
-      conv.isRead = true;
+  /// Fetch message requests.
+  Future<void> fetchRequests({int offset = 0, int limit = 20}) async {
+    try {
+      final data = await ApiClient.instance
+          .get('/messages/conversations?requests=true&offset=$offset&limit=$limit');
+      _requests = (data as List)
+          .map((j) => Conversation.fromJson(j as Map<String, dynamic>))
+          .toList();
       notifyListeners();
+    } catch (_) {
+      // keep existing
     }
   }
 
-  void acceptRequest(String conversationId) {
-    final conv = findById(conversationId);
-    conv.requestAccepted = true;
-    conv.isRead = true;
-    notifyListeners();
+  /// Get messages in a conversation.
+  Future<List<ChatMessage>> fetchMessages(int conversationId,
+      {int offset = 0, int limit = 50}) async {
+    try {
+      final data = await ApiClient.instance.get(
+          '/messages/conversations/$conversationId?offset=$offset&limit=$limit');
+      return (data as List)
+          .map((j) => ChatMessage.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
-  void declineRequest(String conversationId) {
-    _conversations.removeWhere((c) => c.id == conversationId);
-    notifyListeners();
+  /// Start or get conversation with a user.
+  Future<Conversation?> startConversation(int userId, {String? text}) async {
+    try {
+      final body = <String, dynamic>{'user_id': userId};
+      if (text != null) body['text'] = text;
+      final data =
+          await ApiClient.instance.post('/messages/conversations', body);
+      return Conversation.fromJson(data as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
   }
 
-  void sendMessage(String conversationId, String text, {String? replyToId}) {
-    final conv = findById(conversationId);
-    conv.messages.add(ChatMessage(
-      id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
-      senderId: 'me',
-      text: text,
-      timestamp: DateTime.now(),
-      replyToId: replyToId,
-    ));
-    conv.isRead = true;
-    notifyListeners();
+  /// Send a message.
+  Future<ChatMessage?> sendMessage(int conversationId, String text,
+      {int? replyToId}) async {
+    try {
+      final body = <String, dynamic>{'text': text};
+      if (replyToId != null) body['reply_to_id'] = replyToId;
+      final data = await ApiClient.instance
+          .post('/messages/conversations/$conversationId', body);
+      return ChatMessage.fromJson(data as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
   }
 
-  void reactToMessage(String conversationId, String messageId, String emoji) {
-    final conv = findById(conversationId);
-    final msg = conv.messages.firstWhere((m) => m.id == messageId);
-    msg.reaction = msg.reaction == emoji ? null : emoji;
-    notifyListeners();
+  /// Mark conversation as read.
+  Future<void> markAsRead(int conversationId) async {
+    try {
+      await ApiClient.instance
+          .patch('/messages/conversations/$conversationId/read', {});
+    } catch (_) {
+      // ignore
+    }
   }
 
-  ChatMessage? findMessageInConversation(String conversationId, String messageId) {
-    final conv = findById(conversationId);
-    return conv.messages.where((m) => m.id == messageId).firstOrNull;
+  /// Accept a message request.
+  Future<void> acceptRequest(int conversationId) async {
+    try {
+      await ApiClient.instance
+          .patch('/messages/conversations/$conversationId/accept', {});
+      _requests.removeWhere((c) => c.id == conversationId);
+      await fetchConversations();
+    } catch (_) {
+      // ignore
+    }
   }
 
-  // ── Mock data ─────────────────────────────────────────────
+  /// Decline/delete a conversation.
+  Future<void> declineRequest(int conversationId) async {
+    try {
+      await ApiClient.instance
+          .delete('/messages/conversations/$conversationId');
+      _requests.removeWhere((c) => c.id == conversationId);
+      _conversations.removeWhere((c) => c.id == conversationId);
+      notifyListeners();
+    } catch (_) {
+      // ignore
+    }
+  }
 
-  static List<Conversation> _buildMockConversations() {
-    final now = DateTime.now();
+  /// React to a message.
+  Future<void> reactToMessage(int messageId, String? emoji) async {
+    try {
+      await ApiClient.instance
+          .patch('/messages/$messageId/reaction', {'reaction': emoji});
+    } catch (_) {
+      // ignore
+    }
+  }
 
-    return [
-      // ── Accepted conversations ────────────────────────────
-
-      // 1. Marta Sala — unread
-      Conversation(
-        id: 'conv-marta',
-        participantId: 'marta-sala',
-        isRead: false,
-        messages: [
-          ChatMessage(
-            id: 'msg-m1',
-            senderId: 'me',
-            text: 'Hi Marta! I love the reactive glaze on the wide bowl. Is it possible to get a custom colour?',
-            timestamp: now.subtract(const Duration(hours: 2, minutes: 15)),
-          ),
-          ChatMessage(
-            id: 'msg-m2',
-            senderId: 'marta-sala',
-            text: 'Thank you! Yes, I can work with different earth tones. What palette are you thinking?',
-            timestamp: now.subtract(const Duration(hours: 1, minutes: 50)),
-          ),
-          ChatMessage(
-            id: 'msg-m3',
-            senderId: 'me',
-            text: 'Something warm — terracotta with a matte finish, if possible.',
-            timestamp: now.subtract(const Duration(hours: 1, minutes: 30)),
-          ),
-          ChatMessage(
-            id: 'msg-m4',
-            senderId: 'marta-sala',
-            text: 'I can do a custom glaze in that tone. Want me to send some options?',
-            timestamp: now.subtract(const Duration(minutes: 12)),
-          ),
-        ],
-      ),
-
-      // 2. Atelier NM — read
-      Conversation(
-        id: 'conv-atelier',
-        participantId: 'atelier-nm',
-        isRead: true,
-        messages: [
-          ChatMessage(
-            id: 'msg-a1',
-            senderId: 'me',
-            text: 'Hi, is the linen daybed still available?',
-            timestamp: now.subtract(const Duration(days: 1, hours: 5)),
-          ),
-          ChatMessage(
-            id: 'msg-a2',
-            senderId: 'atelier-nm',
-            text: 'Yes! We have one in stock in the oat linen. Shall I reserve it for you?',
-            timestamp: now.subtract(const Duration(days: 1, hours: 4)),
-          ),
-          ChatMessage(
-            id: 'msg-a3',
-            senderId: 'me',
-            text: 'Yes please. Can you ship to Barcelona?',
-            timestamp: now.subtract(const Duration(days: 1, hours: 3)),
-          ),
-          ChatMessage(
-            id: 'msg-a4',
-            senderId: 'atelier-nm',
-            text: 'Perfect, I\'ll ship it Monday',
-            timestamp: now.subtract(const Duration(days: 1, hours: 2)),
-          ),
-        ],
-      ),
-
-      // 3. Studio Vèra — unread
-      Conversation(
-        id: 'conv-vera',
-        participantId: 'studio-vera',
-        isRead: false,
-        messages: [
-          ChatMessage(
-            id: 'msg-v1',
-            senderId: 'me',
-            text: 'Is the tall floor lamp from the autumn collection still available?',
-            timestamp: now.subtract(const Duration(hours: 5)),
-          ),
-          ChatMessage(
-            id: 'msg-v2',
-            senderId: 'studio-vera',
-            text: 'The lamp is still available, yes! It comes with the natural linen shade.',
-            timestamp: now.subtract(const Duration(hours: 3)),
-          ),
-        ],
-      ),
-
-      // 4. Teixidors — read
-      Conversation(
-        id: 'conv-teixidors',
-        participantId: 'teixidors',
-        isRead: true,
-        messages: [
-          ChatMessage(
-            id: 'msg-t1',
-            senderId: 'me',
-            text: 'Just placed an order for the merino throw in grey. Can\'t wait!',
-            timestamp: now.subtract(const Duration(days: 3, hours: 2)),
-          ),
-          ChatMessage(
-            id: 'msg-t2',
-            senderId: 'teixidors',
-            text: 'Thanks for your order! The throw ships next week. We hope you love it.',
-            timestamp: now.subtract(const Duration(days: 3)),
-          ),
-        ],
-      ),
-
-      // 5. Clara Boj — unread
-      Conversation(
-        id: 'conv-clara',
-        participantId: 'clara-boj',
-        isRead: false,
-        messages: [
-          ChatMessage(
-            id: 'msg-c1',
-            senderId: 'me',
-            text: 'The sage plate sold out — will you restock?',
-            timestamp: now.subtract(const Duration(days: 2, hours: 8)),
-          ),
-          ChatMessage(
-            id: 'msg-c2',
-            senderId: 'clara-boj',
-            text: 'I have a similar piece in a slightly larger size if you\'re interested.',
-            timestamp: now.subtract(const Duration(days: 2, hours: 6)),
-          ),
-        ],
-      ),
-
-      // ── Requests ──────────────────────────────────────────
-
-      // 6. Elena Martí — request
-      Conversation(
-        id: 'conv-elena',
-        participantId: 'elena-marti',
-        isRead: false,
-        isRequest: true,
-        messages: [
-          ChatMessage(
-            id: 'msg-e1',
-            senderId: 'elena-marti',
-            text: 'Hi! I saw your collection and wondered if you\'d be open to a trade? I have some ceramic pieces that might complement yours.',
-            timestamp: now.subtract(const Duration(hours: 8)),
-          ),
-        ],
-      ),
-
-      // 7. Pau Vives — request
-      Conversation(
-        id: 'conv-pau',
-        participantId: 'pau-vives',
-        isRead: false,
-        isRequest: true,
-        messages: [
-          ChatMessage(
-            id: 'msg-p1',
-            senderId: 'pau-vives',
-            text: 'Hello, I\'m a textile designer based in Valencia. Would love to discuss a collaboration on a woven piece for your space.',
-            timestamp: now.subtract(const Duration(days: 1, hours: 12)),
-          ),
-        ],
-      ),
-
-      // 8. Nuria Coll — request
-      Conversation(
-        id: 'conv-nuria',
-        participantId: 'nuria-coll',
-        isRead: false,
-        isRequest: true,
-        messages: [
-          ChatMessage(
-            id: 'msg-n1',
-            senderId: 'nuria-coll',
-            text: 'I\'m curating a show in Seville and your pieces would be a perfect fit. Could we chat about a possible feature?',
-            timestamp: now.subtract(const Duration(days: 4)),
-          ),
-        ],
-      ),
-    ];
+  /// Fetch unread count.
+  Future<void> fetchUnreadCount() async {
+    try {
+      final data = await ApiClient.instance.get('/messages/unread-count');
+      _unreadCount = (data as Map<String, dynamic>)['unread_count'] as int;
+      notifyListeners();
+    } catch (_) {
+      // ignore
+    }
   }
 }

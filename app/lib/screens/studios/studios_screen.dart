@@ -1,126 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../../models/user_profile.dart';
+import '../../core/browse_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/shared_app_bar.dart';
 import '../profile/user_profile_screen.dart';
 
-// ── Mock studio data ──────────────────────────────────────────
-
-class _MockStudio {
-  final String name;
-  final String location;
-  final List<String> specialties;
-  final int pieceCount;
-  final int followerCount;
-  final bool verified;
-  final Color avatarColor;
-
-  const _MockStudio({
-    required this.name,
-    required this.location,
-    required this.specialties,
-    required this.pieceCount,
-    required this.followerCount,
-    required this.verified,
-    required this.avatarColor,
-  });
-}
-
-const _mockStudios = <_MockStudio>[
-  _MockStudio(
-    name: 'Marta Sala',
-    location: 'Barcelona',
-    specialties: ['Ceramic', 'Sculpture'],
-    pieceCount: 19,
-    followerCount: 1640,
-    verified: true,
-    avatarColor: Color(0xFFBEB0A0),
-  ),
-  _MockStudio(
-    name: 'Atelier NM',
-    location: 'Madrid',
-    specialties: ['Furniture', 'Textiles'],
-    pieceCount: 12,
-    followerCount: 980,
-    verified: true,
-    avatarColor: Color(0xFFCBC2B4),
-  ),
-  _MockStudio(
-    name: 'Studio Vèra',
-    location: 'Valencia',
-    specialties: ['Lighting', 'Decor'],
-    pieceCount: 8,
-    followerCount: 2310,
-    verified: true,
-    avatarColor: Color(0xFFA8997E),
-  ),
-  _MockStudio(
-    name: 'Jordi Canudas',
-    location: 'Girona',
-    specialties: ['Furniture', 'Sculpture'],
-    pieceCount: 6,
-    followerCount: 540,
-    verified: false,
-    avatarColor: Color(0xFF9A8C7B),
-  ),
-  _MockStudio(
-    name: 'Clara Boj',
-    location: 'Barcelona',
-    specialties: ['Ceramic', 'Painting'],
-    pieceCount: 14,
-    followerCount: 1120,
-    verified: true,
-    avatarColor: Color(0xFFD0C5B5),
-  ),
-  _MockStudio(
-    name: 'Teixidors',
-    location: 'Terrassa',
-    specialties: ['Textiles', 'Decor', 'Furniture'],
-    pieceCount: 22,
-    followerCount: 3480,
-    verified: true,
-    avatarColor: Color(0xFFC5B9A5),
-  ),
-  _MockStudio(
-    name: 'Viabizzuno',
-    location: 'Milan',
-    specialties: ['Lighting', 'Sculpture'],
-    pieceCount: 31,
-    followerCount: 5720,
-    verified: true,
-    avatarColor: Color(0xFFB3A594),
-  ),
-  _MockStudio(
-    name: 'Apparatu',
-    location: 'Seville',
-    specialties: ['Ceramic', 'Decor'],
-    pieceCount: 9,
-    followerCount: 870,
-    verified: false,
-    avatarColor: Color(0xFFCABEAE),
-  ),
-  _MockStudio(
-    name: 'Laia Font',
-    location: 'Madrid',
-    specialties: ['Furniture', 'Lighting', 'Decor'],
-    pieceCount: 15,
-    followerCount: 2050,
-    verified: true,
-    avatarColor: Color(0xFF8A7D6A),
-  ),
-  _MockStudio(
-    name: 'Pau Vives',
-    location: 'Valencia',
-    specialties: ['Textiles', 'Painting'],
-    pieceCount: 7,
-    followerCount: 430,
-    verified: false,
-    avatarColor: Color(0xFFB5A898),
-  ),
-];
+// ── Helpers ────────────────────────────────────────────────────
 
 String _formatNumber(int n) {
   if (n < 1000) return '$n';
@@ -131,6 +20,10 @@ String _formatNumber(int n) {
     buffer.write(s[i]);
   }
   return buffer.toString();
+}
+
+Color _parseHexColor(String hex) {
+  return Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
 }
 
 // ── Studios Screen ────────────────────────────────────────────
@@ -146,23 +39,7 @@ class _StudiosScreenState extends State<StudiosScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
 
-  static const _pageSize = 4;
-  int _displayedCount = _pageSize;
-  bool _loading = false;
-
-  bool get _hasMore => _displayedCount < _mockStudios.length;
-
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    setState(() {
-      _displayedCount =
-          (_displayedCount + _pageSize).clamp(0, _mockStudios.length);
-      _loading = false;
-    });
-  }
+  bool _initialLoading = true;
 
   @override
   void initState() {
@@ -170,7 +47,15 @@ class _StudiosScreenState extends State<StudiosScreen>
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
-    )..forward();
+    );
+    _fetchStudios();
+  }
+
+  Future<void> _fetchStudios() async {
+    await BrowseService.instance.fetchUsers();
+    if (!mounted) return;
+    setState(() => _initialLoading = false);
+    _anim.forward();
   }
 
   @override
@@ -200,65 +85,37 @@ class _StudiosScreenState extends State<StudiosScreen>
       backgroundColor: AppColors.bone,
       drawer: const AppDrawer(currentRoute: '/studios'),
       appBar: const SharedAppBar(currentRoute: '/studios'),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FadeTransition(
-              opacity: _fade(0.0, 0.5),
-              child: SlideTransition(
-                position: _slide(0.0, 0.5),
-                child: const _StudiosHeader(),
-              ),
-            ),
-            const SizedBox(height: 28),
-            FadeTransition(
-              opacity: _fade(0.2, 0.7),
-              child: SlideTransition(
-                position: _slide(0.2, 0.7),
-                child: _StudioGrid(
-                  studios: _mockStudios.take(_displayedCount).toList(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            if (_hasMore)
-              Center(
-                child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.only(bottom: 32),
-                        child: LoadingSpinner(),
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.only(bottom: 32),
-                        child: GestureDetector(
-                          onTap: _loadMore,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 28, vertical: 11),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                  color: AppColors.hairline, width: 1),
-                            ),
-                            child: Text(
-                              'Load more',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.inkSoft,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ),
+      body: _initialLoading
+          ? const Center(child: LoadingSpinner())
+          : ListenableBuilder(
+              listenable: BrowseService.instance,
+              builder: (context, _) {
+                final users = BrowseService.instance.users;
+                return SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      FadeTransition(
+                        opacity: _fade(0.0, 0.5),
+                        child: SlideTransition(
+                          position: _slide(0.0, 0.5),
+                          child: _StudiosHeader(userCount: users.length),
                         ),
                       ),
-              )
-            else
-              const SizedBox(height: 32),
-          ],
-        ),
-      ),
+                      const SizedBox(height: 28),
+                      FadeTransition(
+                        opacity: _fade(0.2, 0.7),
+                        child: SlideTransition(
+                          position: _slide(0.2, 0.7),
+                          child: _StudioGrid(users: users),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 }
@@ -266,11 +123,11 @@ class _StudiosScreenState extends State<StudiosScreen>
 // ── Studios header ────────────────────────────────────────────
 
 class _StudiosHeader extends StatelessWidget {
-  const _StudiosHeader();
+  final int userCount;
+  const _StudiosHeader({required this.userCount});
 
   @override
   Widget build(BuildContext context) {
-    final verifiedCount = _mockStudios.where((s) => s.verified).length;
     return Padding(
       padding: const EdgeInsets.only(top: 20),
       child: Center(
@@ -279,12 +136,12 @@ class _StudiosHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Left: Nº number ──
+              // ── Left: No number ──
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Nº',
+                    'N\u00ba',
                     style: GoogleFonts.fraunces(
                       fontSize: 42,
                       fontWeight: FontWeight.w300,
@@ -309,7 +166,7 @@ class _StudiosHeader extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '$verifiedCount verified studios',
+                    '$userCount studios',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
@@ -356,8 +213,8 @@ class _StudiosHeader extends StatelessWidget {
 // ── Studio grid ───────────────────────────────────────────────
 
 class _StudioGrid extends StatelessWidget {
-  final List<_MockStudio> studios;
-  const _StudioGrid({required this.studios});
+  final List<BrowseUser> users;
+  const _StudioGrid({required this.users});
 
   @override
   Widget build(BuildContext context) {
@@ -366,14 +223,14 @@ class _StudioGrid extends StatelessWidget {
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: studios.length,
+        itemCount: users.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 14,
           mainAxisSpacing: 24,
           childAspectRatio: 0.58,
         ),
-        itemBuilder: (_, i) => _StudioCard(studio: studios[i]),
+        itemBuilder: (_, i) => _StudioCard(user: users[i]),
       ),
     );
   }
@@ -382,8 +239,8 @@ class _StudioGrid extends StatelessWidget {
 // ── Studio card ───────────────────────────────────────────────
 
 class _StudioCard extends StatefulWidget {
-  final _MockStudio studio;
-  const _StudioCard({required this.studio});
+  final BrowseUser user;
+  const _StudioCard({required this.user});
 
   @override
   State<_StudioCard> createState() => _StudioCardState();
@@ -393,40 +250,50 @@ class _StudioCardState extends State<_StudioCard> {
   bool _saved = false;
 
   void _openProfile() {
-    final profile = findProfileByName(widget.studio.name);
-    if (profile != null) {
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          pageBuilder: (_, _, _) =>
-              UserProfileScreen(userId: profile.id),
-          transitionsBuilder: (_, animation, _, child) =>
-              FadeTransition(opacity: animation, child: child),
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
-      );
-    }
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) =>
+            UserProfileScreen(userId: widget.user.id.toString()),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.studio;
-    final description = [s.location, ...s.specialties].join(' · ');
+    final u = widget.user;
+    final displayName = u.studioName ?? u.username;
+    final locationParts = <String>[
+      if (u.city != null) u.city!,
+      if (u.discipline != null) u.discipline!,
+    ];
+    final description = locationParts.join(' \u00b7 ');
     final stats =
-        '${s.pieceCount} pieces · ${_formatNumber(s.followerCount)} followers';
+        '${u.piecesCount} pieces \u00b7 ${_formatNumber(u.followersCount)} followers';
+
+    final avatarColor = _parseHexColor(u.avatarColor);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Image placeholder ──
+        // ── Image / avatar area ──
         Expanded(
           child: GestureDetector(
             onTap: _openProfile,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Container(
-                color: s.avatarColor,
-                width: double.infinity,
-              ),
+              child: u.avatarImageB64 != null
+                  ? Image.memory(
+                      base64Decode(u.avatarImageB64!),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    )
+                  : Container(
+                      color: avatarColor,
+                      width: double.infinity,
+                    ),
             ),
           ),
         ),
@@ -444,12 +311,12 @@ class _StudioCardState extends State<_StudioCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Name + verified badge
+                    // Name
                     Row(
                       children: [
                         Flexible(
                           child: Text(
-                            s.name,
+                            displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
@@ -459,28 +326,21 @@ class _StudioCardState extends State<_StudioCard> {
                             ),
                           ),
                         ),
-                        if (s.verified) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.verified,
-                            size: 14,
-                            color: AppColors.sage,
-                          ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 2),
-                    // Location · Specialties
-                    Text(
-                      description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.muted,
+                    // Location / discipline
+                    if (description.isNotEmpty)
+                      Text(
+                        description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.muted,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 4),
                     // Stats
                     Text(

@@ -1,63 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
+import '../../core/rental_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
 import '../orders/orders_screen.dart';
-
-// ═════════════════════════════════════════════════════════════
-// ── Rental data ─────────────────────────────────────────────
-// ═════════════════════════════════════════════════════════════
-
-enum _RentalStatus { confirmed, pending }
-
-class _Rental {
-  final String id;
-  final String productName;
-  final String renterName;
-  final DateTime start;
-  final DateTime end;
-  final _RentalStatus status;
-  final Color color;
-  final double dailyRate;
-
-  const _Rental({
-    required this.id,
-    required this.productName,
-    required this.renterName,
-    required this.start,
-    required this.end,
-    required this.status,
-    required this.color,
-    required this.dailyRate,
-  });
-
-  int get days => end.difference(start).inDays + 1;
-  double get total => dailyRate * days;
-
-  String get dateLabel {
-    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    if (start.month == end.month) {
-      return '${m[start.month - 1]} ${start.day}–${end.day}';
-    }
-    return '${m[start.month - 1]} ${start.day} – ${m[end.month - 1]} ${end.day}';
-  }
-}
-
-final _mockRentals = <_Rental>[
-  // ── Confirmed (past & current) ──
-  _Rental(id: 'r1', productName: 'Linen Armchair', renterName: 'Ana P.', start: DateTime(2026, 5, 5), end: DateTime(2026, 5, 9), status: _RentalStatus.confirmed, color: const Color(0xFFCBC2B4), dailyRate: 180),
-  _Rental(id: 'r2', productName: 'Walnut Side Table', renterName: 'Marc L.', start: DateTime(2026, 5, 15), end: DateTime(2026, 5, 20), status: _RentalStatus.confirmed, color: const Color(0xFF9A8C7B), dailyRate: 110),
-  _Rental(id: 'r3', productName: 'Ceramic Vase', renterName: 'Laura S.', start: DateTime(2026, 5, 26), end: DateTime(2026, 5, 30), status: _RentalStatus.confirmed, color: const Color(0xFFCABEAE), dailyRate: 45),
-  _Rental(id: 'r4', productName: 'Woven Throw', renterName: 'Pilar G.', start: DateTime(2026, 6, 1), end: DateTime(2026, 6, 6), status: _RentalStatus.confirmed, color: const Color(0xFFC5B9A5), dailyRate: 40),
-  _Rental(id: 'r5', productName: 'Linen Armchair', renterName: 'David M.', start: DateTime(2026, 6, 8), end: DateTime(2026, 6, 14), status: _RentalStatus.confirmed, color: const Color(0xFFCBC2B4), dailyRate: 180),
-  _Rental(id: 'r6', productName: 'Walnut Side Table', renterName: 'Sofia R.', start: DateTime(2026, 6, 10), end: DateTime(2026, 6, 13), status: _RentalStatus.confirmed, color: const Color(0xFF9A8C7B), dailyRate: 110),
-  _Rental(id: 'r7', productName: 'Ceramic Vase', renterName: 'Jordi T.', start: DateTime(2026, 6, 22), end: DateTime(2026, 6, 26), status: _RentalStatus.confirmed, color: const Color(0xFFCABEAE), dailyRate: 45),
-  // ── Pending ──
-  _Rental(id: 'r8', productName: 'Mesa Vela', renterName: 'Helena R.', start: DateTime(2026, 6, 16), end: DateTime(2026, 6, 22), status: _RentalStatus.pending, color: const Color(0xFF9A8C7B), dailyRate: 110),
-  _Rental(id: 'r9', productName: 'Aire VII', renterName: 'Margot D.', start: DateTime(2026, 6, 24), end: DateTime(2026, 6, 29), status: _RentalStatus.pending, color: const Color(0xFFCBC2B4), dailyRate: 180),
-  _Rental(id: 'r10', productName: 'Suite Verano', renterName: 'Thomas K.', start: DateTime(2026, 7, 3), end: DateTime(2026, 7, 8), status: _RentalStatus.pending, color: const Color(0xFFA8997E), dailyRate: 70),
-];
 
 // ═════════════════════════════════════════════════════════════
 // ── Rental Calendar Screen ──────────────────────────────────
@@ -80,6 +27,9 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
   late Set<String> _blockedKeys; // 'yyyy-mm-dd'
   String _filter = 'All pieces';
 
+  bool _loading = true;
+  List<RentalData> _rentals = [];
+
   // ── Animation helpers ──────────────────────────────────────
 
   Animation<double> _fade(double s, double e) => CurvedAnimation(
@@ -101,17 +51,31 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
     super.initState();
     final now = DateTime.now();
     _focusMonth = DateTime(now.year, now.month);
-    _blockedKeys = {'2026-06-28', '2026-06-29', '2026-06-30'};
+    _blockedKeys = {};
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _fetchRentals();
   }
 
   @override
   void dispose() {
     _anim.dispose();
     super.dispose();
+  }
+
+  // ── Fetch rentals ───────────────────────────────────────────
+
+  Future<void> _fetchRentals() async {
+    setState(() => _loading = true);
+    await RentalService.instance.fetchRentals(role: 'owner', limit: 100);
+    if (mounted) {
+      setState(() {
+        _rentals = RentalService.instance.rentals;
+        _loading = false;
+      });
+    }
   }
 
   // ── Date helpers ───────────────────────────────────────────
@@ -134,24 +98,27 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
 
   // ── Filtered rentals ───────────────────────────────────────
 
-  List<_Rental> get _filteredRentals {
-    if (_filter == 'All pieces') return _mockRentals;
-    return _mockRentals.where((r) => r.productName == _filter).toList();
+  List<RentalData> get _filteredRentals {
+    if (_filter == 'All pieces') return _rentals;
+    return _rentals.where((r) => r.pieceTitle == _filter).toList();
   }
 
-  List<_Rental> get _pendingRentals =>
-      _mockRentals.where((r) => r.status == _RentalStatus.pending).toList();
+  List<RentalData> get _pendingRentals =>
+      _rentals.where((r) => r.status == 'pending').toList();
 
   // Get rental info for a specific day
-  _Rental? _getRentalForDay(DateTime date) {
-    // Confirmed takes priority
+  RentalData? _getRentalForDay(DateTime date) {
+    // Non-pending takes priority
     for (final r in _filteredRentals) {
-      if (r.status == _RentalStatus.confirmed && _inRange(date, r.start, r.end)) {
+      if (r.status != 'pending' &&
+          r.status != 'cancelled' &&
+          r.status != 'rejected' &&
+          _inRange(date, r.startDate, r.endDate)) {
         return r;
       }
     }
     for (final r in _filteredRentals) {
-      if (r.status == _RentalStatus.pending && _inRange(date, r.start, r.end)) {
+      if (r.status == 'pending' && _inRange(date, r.startDate, r.endDate)) {
         return r;
       }
     }
@@ -162,8 +129,10 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
 
   List<String> get _productNames {
     final names = <String>{};
-    for (final r in _mockRentals) {
-      names.add(r.productName);
+    for (final r in _rentals) {
+      if (r.pieceTitle != null) {
+        names.add(r.pieceTitle!);
+      }
     }
     return names.toList()..sort();
   }
@@ -178,7 +147,7 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
     for (var d = 1; d <= daysInMonth; d++) {
       final date = DateTime(y, m, d);
       final r = _getRentalForDay(date);
-      if (r != null && r.status == _RentalStatus.confirmed) count++;
+      if (r != null && r.status != 'pending') count++;
     }
     return count;
   }
@@ -188,13 +157,13 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
     final m = _focusMonth.month;
     double total = 0;
     for (final r in _filteredRentals) {
-      if (r.status != _RentalStatus.confirmed) continue;
-      // Count days of this rental that fall in the focus month
+      if (r.status == 'pending' || r.status == 'cancelled' || r.status == 'rejected') continue;
       final daysInMonth = DateTime(y, m + 1, 0).day;
+      final dailyRate = r.dailyRateCents / 100.0;
       for (var d = 1; d <= daysInMonth; d++) {
         final date = DateTime(y, m, d);
-        if (_inRange(date, r.start, r.end)) {
-          total += r.dailyRate;
+        if (_inRange(date, r.startDate, r.endDate)) {
+          total += dailyRate;
         }
       }
     }
@@ -203,7 +172,7 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
 
   int get _avgDuration {
     final confirmed =
-        _filteredRentals.where((r) => r.status == _RentalStatus.confirmed);
+        _filteredRentals.where((r) => r.status != 'pending' && r.status != 'cancelled' && r.status != 'rejected');
     if (confirmed.isEmpty) return 0;
     final totalDays = confirmed.fold(0, (s, r) => s + r.days);
     return (totalDays / confirmed.length).round();
@@ -212,8 +181,9 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
   int get _onRentalNow {
     final now = DateTime.now();
     return _filteredRentals
-        .where(
-            (r) => r.status == _RentalStatus.confirmed && _inRange(now, r.start, r.end))
+        .where((r) =>
+            (r.status == 'approved' || r.status == 'active') &&
+            _inRange(now, r.startDate, r.endDate))
         .length;
   }
 
@@ -225,9 +195,19 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
         if (i > 0 && (abs.length - i) % 3 == 0) buf.write(',');
         buf.write(abs[i]);
       }
-      return '€$buf';
+      return '\u20AC$buf';
     }
-    return '€${val.toStringAsFixed(0)}';
+    return '\u20AC${val.toStringAsFixed(0)}';
+  }
+
+  // ── Date label for rental ──────────────────────────────────
+
+  String _rentalDateLabel(RentalData r) {
+    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if (r.startDate.month == r.endDate.month) {
+      return '${m[r.startDate.month - 1]} ${r.startDate.day}\u2013${r.endDate.day}';
+    }
+    return '${m[r.startDate.month - 1]} ${r.startDate.day} \u2013 ${m[r.endDate.month - 1]} ${r.endDate.day}';
   }
 
   // ── Month name ─────────────────────────────────────────────
@@ -303,6 +283,26 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
     );
   }
 
+  // ── Respond to rental ──────────────────────────────────────
+
+  Future<void> _respondToRental(RentalData rental, bool approve) async {
+    final result = await RentalService.instance.respondToRental(
+      rental.id,
+      accept: approve,
+    );
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(approve
+              ? '${rental.pieceTitle ?? 'Rental'} approved for ${rental.renterUsername ?? 'renter'}'
+              : '${rental.pieceTitle ?? 'Rental'} declined'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _fetchRentals();
+    }
+  }
+
   // ── Build ──────────────────────────────────────────────────
 
   @override
@@ -311,309 +311,311 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
       backgroundColor: AppColors.bone,
       appBar: const SharedAppBar(currentRoute: '/rental-calendar'),
       drawer: const AppDrawer(currentRoute: '/rental-calendar'),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── A) Title + controls ──
-            FadeTransition(
-              opacity: _fade(0.0, 0.40),
-              child: SlideTransition(
-                position: _slide(0.0, 0.40),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Rental Calendar',
-                        style: GoogleFonts.fraunces(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.inkStrong,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Filter + Block dates
-                      Row(
-                        children: [
-                          // Filter chip
-                          GestureDetector(
-                            onTap: _showFilterSheet,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                    color: AppColors.hairline, width: 1),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          : SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── A) Title + controls ──
+                  FadeTransition(
+                    opacity: _fade(0.0, 0.40),
+                    child: SlideTransition(
+                      position: _slide(0.0, 0.40),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Rental Calendar',
+                              style: GoogleFonts.fraunces(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.inkStrong,
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _filter,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
+                            ),
+                            const SizedBox(height: 16),
+                            // Filter + Block dates
+                            Row(
+                              children: [
+                                // Filter chip
+                                GestureDetector(
+                                  onTap: _showFilterSheet,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                          color: AppColors.hairline, width: 1),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _filter,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.inkSoft,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        const Icon(Icons.keyboard_arrow_down_rounded,
+                                            size: 16, color: AppColors.muted),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Block dates toggle
+                                GestureDetector(
+                                  onTap: () =>
+                                      setState(() => _blockMode = !_blockMode),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: _blockMode
+                                          ? AppColors.ink
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: _blockMode
+                                            ? AppColors.ink
+                                            : AppColors.hairline,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Block dates',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: _blockMode
+                                            ? AppColors.bone
+                                            : AppColors.inkSoft,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                // View toggle
+                                GestureDetector(
+                                  onTap: () =>
+                                      setState(() => _weekly = !_weekly),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                          color: AppColors.hairline, width: 1),
+                                    ),
+                                    child: Icon(
+                                      _weekly
+                                          ? Icons.calendar_month_rounded
+                                          : Icons.view_week_rounded,
+                                      size: 16,
                                       color: AppColors.inkSoft,
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.keyboard_arrow_down_rounded,
-                                      size: 16, color: AppColors.muted),
-                                ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ── B) Month navigation ──
+                  FadeTransition(
+                    opacity: _fade(0.06, 0.46),
+                    child: SlideTransition(
+                      position: _slide(0.06, 0.46),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            GestureDetector(
+                              onTap: _prevMonth,
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(Icons.chevron_left_rounded,
+                                    size: 22, color: AppColors.inkSoft),
                               ),
                             ),
+                            Text(
+                              _monthLabel,
+                              style: GoogleFonts.fraunces(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.inkStrong,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _nextMonth,
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(Icons.chevron_right_rounded,
+                                    size: 22, color: AppColors.inkSoft),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // ── C) Calendar grid ──
+                  FadeTransition(
+                    opacity: _fade(0.12, 0.52),
+                    child: SlideTransition(
+                      position: _slide(0.12, 0.52),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: _weekly
+                            ? _buildWeeklyView(key: ValueKey('w$_weekIndex'))
+                            : _buildMonthlyView(key: const ValueKey('monthly')),
+                      ),
+                    ),
+                  ),
+
+                  // ── Week navigation (weekly mode) ──
+                  if (_weekly)
+                    Padding(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: _weekIndex > 0
+                                ? () => setState(() => _weekIndex--)
+                                : null,
+                            child: Icon(Icons.chevron_left_rounded,
+                                size: 20,
+                                color: _weekIndex > 0
+                                    ? AppColors.inkSoft
+                                    : AppColors.hairline),
                           ),
                           const SizedBox(width: 8),
-                          // Block dates toggle
-                          GestureDetector(
-                            onTap: () =>
-                                setState(() => _blockMode = !_blockMode),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: _blockMode
-                                    ? AppColors.ink
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: _blockMode
-                                      ? AppColors.ink
-                                      : AppColors.hairline,
-                                ),
-                              ),
-                              child: Text(
-                                'Block dates',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: _blockMode
-                                      ? AppColors.bone
-                                      : AppColors.inkSoft,
-                                ),
-                              ),
-                            ),
+                          Text(
+                            'Week ${_weekIndex + 1}',
+                            style: GoogleFonts.inter(
+                                fontSize: 12, color: AppColors.muted),
                           ),
-                          const Spacer(),
-                          // View toggle
+                          const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: () =>
-                                setState(() => _weekly = !_weekly),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 7),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                    color: AppColors.hairline, width: 1),
-                              ),
-                              child: Icon(
-                                _weekly
-                                    ? Icons.calendar_month_rounded
-                                    : Icons.view_week_rounded,
-                                size: 16,
-                                color: AppColors.inkSoft,
-                              ),
-                            ),
+                            onTap: _weekIndex < _totalWeeks - 1
+                                ? () => setState(() => _weekIndex++)
+                                : null,
+                            child: Icon(Icons.chevron_right_rounded,
+                                size: 20,
+                                color: _weekIndex < _totalWeeks - 1
+                                    ? AppColors.inkSoft
+                                    : AppColors.hairline),
                           ),
                         ],
                       ),
-                    ],
+                    ),
+
+                  const SizedBox(height: 16),
+
+                  // ── D) Legend ──
+                  FadeTransition(
+                    opacity: _fade(0.18, 0.58),
+                    child: SlideTransition(
+                      position: _slide(0.18, 0.58),
+                      child: _buildLegend(),
+                    ),
                   ),
-                ),
-              ),
-            ),
 
-            const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
-            // ── B) Month navigation ──
-            FadeTransition(
-              opacity: _fade(0.06, 0.46),
-              child: SlideTransition(
-                position: _slide(0.06, 0.46),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      GestureDetector(
-                        onTap: _prevMonth,
-                        child: const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(Icons.chevron_left_rounded,
-                              size: 22, color: AppColors.inkSoft),
-                        ),
-                      ),
-                      Text(
-                        _monthLabel,
-                        style: GoogleFonts.fraunces(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.inkStrong,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: _nextMonth,
-                        child: const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(Icons.chevron_right_rounded,
-                              size: 22, color: AppColors.inkSoft),
-                        ),
-                      ),
-                    ],
+                  // ── E) Stats row ──
+                  FadeTransition(
+                    opacity: _fade(0.24, 0.64),
+                    child: SlideTransition(
+                      position: _slide(0.24, 0.64),
+                      child: _buildStats(),
+                    ),
                   ),
-                ),
-              ),
-            ),
 
-            const SizedBox(height: 16),
+                  const SizedBox(height: 24),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child:
+                        Divider(color: AppColors.hairline, height: 1, thickness: 1),
+                  ),
 
-            // ── C) Calendar grid ──
-            FadeTransition(
-              opacity: _fade(0.12, 0.52),
-              child: SlideTransition(
-                position: _slide(0.12, 0.52),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: _weekly
-                      ? _buildWeeklyView(key: ValueKey('w$_weekIndex'))
-                      : _buildMonthlyView(key: const ValueKey('monthly')),
-                ),
-              ),
-            ),
-
-            // ── Week navigation (weekly mode) ──
-            if (_weekly)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: _weekIndex > 0
-                          ? () => setState(() => _weekIndex--)
-                          : null,
-                      child: Icon(Icons.chevron_left_rounded,
-                          size: 20,
-                          color: _weekIndex > 0
-                              ? AppColors.inkSoft
-                              : AppColors.hairline),
+                  // ── F) Pending requests ──
+                  FadeTransition(
+                    opacity: _fade(0.30, 0.70),
+                    child: SlideTransition(
+                      position: _slide(0.30, 0.70),
+                      child: _buildPendingRequests(),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Week ${_weekIndex + 1}',
-                      style: GoogleFonts.inter(
-                          fontSize: 12, color: AppColors.muted),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _weekIndex < _totalWeeks - 1
-                          ? () => setState(() => _weekIndex++)
-                          : null,
-                      child: Icon(Icons.chevron_right_rounded,
-                          size: 20,
-                          color: _weekIndex < _totalWeeks - 1
-                              ? AppColors.inkSoft
-                              : AppColors.hairline),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
 
-            const SizedBox(height: 16),
+                  const SizedBox(height: 24),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child:
+                        Divider(color: AppColors.hairline, height: 1, thickness: 1),
+                  ),
 
-            // ── D) Legend ──
-            FadeTransition(
-              opacity: _fade(0.18, 0.58),
-              child: SlideTransition(
-                position: _slide(0.18, 0.58),
-                child: _buildLegend(),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── E) Stats row ──
-            FadeTransition(
-              opacity: _fade(0.24, 0.64),
-              child: SlideTransition(
-                position: _slide(0.24, 0.64),
-                child: _buildStats(),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
-              child:
-                  Divider(color: AppColors.hairline, height: 1, thickness: 1),
-            ),
-
-            // ── F) Pending requests ──
-            FadeTransition(
-              opacity: _fade(0.30, 0.70),
-              child: SlideTransition(
-                position: _slide(0.30, 0.70),
-                child: _buildPendingRequests(),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
-              child:
-                  Divider(color: AppColors.hairline, height: 1, thickness: 1),
-            ),
-
-            // ── G) Footer link ──
-            FadeTransition(
-              opacity: _fade(0.38, 0.78),
-              child: SlideTransition(
-                position: _slide(0.38, 0.78),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        PageRouteBuilder(
-                          pageBuilder: (_, _, _) =>
-                              const OrdersScreen(canGoBack: true),
-                          transitionsBuilder: (_, anim, _, child) =>
-                              FadeTransition(opacity: anim, child: child),
-                          transitionDuration:
-                              const Duration(milliseconds: 300),
-                        ),
-                      );
-                    },
-                    child: Row(
-                      children: [
-                        Text(
-                          'View all confirmed rentals',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.inkSoft,
+                  // ── G) Footer link ──
+                  FadeTransition(
+                    opacity: _fade(0.38, 0.78),
+                    child: SlideTransition(
+                      position: _slide(0.38, 0.78),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              PageRouteBuilder(
+                                pageBuilder: (_, _, _) =>
+                                    const OrdersScreen(canGoBack: true),
+                                transitionsBuilder: (_, anim, _, child) =>
+                                    FadeTransition(opacity: anim, child: child),
+                                transitionDuration:
+                                    const Duration(milliseconds: 300),
+                              ),
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              Text(
+                                'View all confirmed rentals',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.inkSoft,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.arrow_forward_rounded,
+                                  size: 15, color: AppColors.inkSoft),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.arrow_forward_rounded,
-                            size: 15, color: AppColors.inkSoft),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+
+                  const SizedBox(height: 48),
+                ],
               ),
             ),
-
-            const SizedBox(height: 48),
-          ],
-        ),
-      ),
     );
   }
 
@@ -708,14 +710,14 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
                   bg = AppColors.muted2.withValues(alpha: 0.5);
                   textColor = AppColors.muted;
                 } else if (rental != null) {
-                  if (rental.status == _RentalStatus.confirmed) {
-                    bg = rental.color.withValues(alpha: 0.25);
+                  if (rental.status != 'pending') {
+                    bg = AppColors.sage.withValues(alpha: 0.25);
                     textColor = AppColors.inkStrong;
-                    productLabel = rental.productName;
+                    productLabel = rental.pieceTitle;
                   } else {
                     bg = AppColors.gold.withValues(alpha: 0.12);
                     textColor = AppColors.gold;
-                    productLabel = rental.productName;
+                    productLabel = rental.pieceTitle;
                   }
                 }
 
@@ -740,7 +742,7 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
                         borderRadius: BorderRadius.circular(6),
                         border: today
                             ? Border.all(color: AppColors.accent, width: 1.5)
-                            : rental?.status == _RentalStatus.pending
+                            : rental?.status == 'pending'
                                 ? Border.all(
                                     color: AppColors.gold, width: 1)
                                 : null,
@@ -827,8 +829,8 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
       bg = AppColors.muted2.withValues(alpha: 0.45);
       textColor = AppColors.muted;
     } else if (rental != null) {
-      if (rental.status == _RentalStatus.confirmed) {
-        bg = rental.color.withValues(alpha: 0.3);
+      if (rental.status != 'pending') {
+        bg = AppColors.sage.withValues(alpha: 0.3);
         textColor = AppColors.inkStrong;
       } else {
         bg = AppColors.gold.withValues(alpha: 0.10);
@@ -845,9 +847,9 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
     BorderRadius radius = BorderRadius.circular(6);
     if (rental != null) {
       final isSpanStart =
-          _sameDay(date, rental.start) || date.weekday == DateTime.monday;
+          _sameDay(date, rental.startDate) || date.weekday == DateTime.monday;
       final isSpanEnd =
-          _sameDay(date, rental.end) || date.weekday == DateTime.sunday;
+          _sameDay(date, rental.endDate) || date.weekday == DateTime.sunday;
       if (isSpanStart && isSpanEnd) {
         radius = BorderRadius.circular(6);
       } else if (isSpanStart) {
@@ -1028,7 +1030,12 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
                     GoogleFonts.inter(fontSize: 13, color: AppColors.muted)),
           )
         else
-          ...pending.map((r) => _PendingCard(rental: r)),
+          ...pending.map((r) => _PendingCard(
+                rental: r,
+                dateLabel: _rentalDateLabel(r),
+                onApprove: () => _respondToRental(r, true),
+                onDecline: () => _respondToRental(r, false),
+              )),
       ],
     );
   }
@@ -1039,8 +1046,17 @@ class _RentalCalendarScreenState extends State<RentalCalendarScreen>
 // ═════════════════════════════════════════════════════════════
 
 class _PendingCard extends StatelessWidget {
-  final _Rental rental;
-  const _PendingCard({required this.rental});
+  final RentalData rental;
+  final String dateLabel;
+  final VoidCallback onApprove;
+  final VoidCallback onDecline;
+
+  const _PendingCard({
+    required this.rental,
+    required this.dateLabel,
+    required this.onApprove,
+    required this.onDecline,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1060,9 +1076,12 @@ class _PendingCard extends StatelessWidget {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: rental.color,
+                        color: AppColors.muted2,
                         borderRadius: BorderRadius.circular(6),
                       ),
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.image_outlined,
+                          size: 16, color: AppColors.muted),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1070,7 +1089,7 @@ class _PendingCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            rental.productName,
+                            rental.pieceTitle ?? 'Untitled piece',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -1079,7 +1098,7 @@ class _PendingCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${rental.renterName} · ${rental.dateLabel}',
+                            '${rental.renterUsername ?? 'Unknown'} \u00B7 $dateLabel',
                             style: GoogleFonts.inter(
                               fontSize: 11,
                               color: AppColors.muted,
@@ -1088,27 +1107,26 @@ class _PendingCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    Text(
+                      rental.totalFormatted,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 // Action buttons
                 Row(
                   children: [
-                    _actionBtn(context, 'Message', Icons.chat_bubble_outline,
-                        AppColors.inkSoft),
-                    const SizedBox(width: 8),
                     _actionBtn(context, 'Decline', Icons.close_rounded,
-                        AppColors.danger),
+                        AppColors.danger, onDecline),
                     const SizedBox(width: 8),
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                                '${rental.productName} approved for ${rental.renterName}'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        ),
+                        onTap: onApprove,
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
@@ -1140,14 +1158,9 @@ class _PendingCard extends StatelessWidget {
   }
 
   Widget _actionBtn(
-      BuildContext context, String label, IconData icon, Color color) {
+      BuildContext context, String label, IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$label: ${rental.productName}'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      ),
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(

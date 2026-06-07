@@ -1,17 +1,20 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../../models/product.dart';
-import '../../models/user_profile.dart';
+import '../../core/browse_service.dart';
+import '../../core/cart_service.dart';
 import '../../core/collection_service.dart';
+import '../../core/follow_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/save_to_collection_modal.dart';
 import '../profile/user_profile_screen.dart';
 import '../../widgets/shared_app_bar.dart';
 
 class ProductDetailScreen extends StatefulWidget {
-  final String productId;
-  const ProductDetailScreen({super.key, required this.productId});
+  final int pieceId;
+  const ProductDetailScreen({super.key, required this.pieceId});
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
@@ -22,19 +25,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool _descExpanded = false;
   final _pageCtrl = PageController();
 
+  BrowsePiece? _piece;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPiece();
+  }
+
+  Future<void> _loadPiece() async {
+    final piece = await BrowseService.instance.fetchPieceDetail(widget.pieceId);
+    if (!mounted) return;
+    setState(() {
+      _piece = piece;
+      _loading = false;
+      if (piece == null) _error = 'Piece not found';
+    });
+  }
+
   @override
   void dispose() {
     _pageCtrl.dispose();
     super.dispose();
   }
 
+  List<String> _getImageB64List() {
+    final piece = _piece!;
+    final list = <String>[];
+    if (piece.images != null && piece.images!.isNotEmpty) {
+      for (final img in piece.images!) {
+        final b64 = img['image_b64'] as String?;
+        if (b64 != null && b64.isNotEmpty) list.add(b64);
+      }
+    }
+    if (list.isEmpty && piece.coverImageB64 != null) {
+      list.add(piece.coverImageB64!);
+    }
+    return list;
+  }
+
   void _openImageViewer(
-      BuildContext context, List<Color> images, int initialIndex) {
+      BuildContext context, List<String> imagesB64, int initialIndex) {
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
-        pageBuilder: (_, _, _) =>
-            _FullScreenImageViewer(images: images, initialIndex: initialIndex),
+        pageBuilder: (_, _, _) => _FullScreenImageViewer(
+            imagesB64: imagesB64, initialIndex: initialIndex),
         transitionsBuilder: (_, anim, _, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 250),
@@ -42,16 +80,79 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  String _getTag() {
+    final piece = _piece!;
+    if (piece.rental && piece.priceCents > 0) return 'Buy or Rent';
+    if (piece.rental) return 'Rent';
+    return 'Buy';
+  }
+
+  String _priceLabel(String tag) => switch (tag) {
+        'Rent' => 'RENTAL PRICE',
+        'Buy or Rent' => 'SALE PRICE',
+        _ => 'SALE PRICE',
+      };
+
+  String _actionLabel(String tag) => switch (tag) {
+        'Rent' => 'Request rental',
+        'Buy or Rent' => 'Add to cart',
+        _ => 'Add to cart',
+      };
+
+  Future<void> _handlePrimaryAction(String tag) async {
+    if (tag == 'Rent') {
+      // For rental-only pieces show a snackbar (rental request flow)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rental request feature coming soon')),
+      );
+    } else {
+      // Add to cart
+      final success = await CartService.instance.addToCart(widget.pieceId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Added to cart' : 'Failed to add to cart'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final product = mockProducts.firstWhere((p) => p.id == widget.productId);
-    final images = product.images;
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: AppColors.surface,
+        drawer: const AppDrawer(currentRoute: '/product-detail'),
+        appBar:
+            const SharedAppBar(currentRoute: '/product-detail', showBack: true),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null || _piece == null) {
+      return Scaffold(
+        backgroundColor: AppColors.surface,
+        drawer: const AppDrawer(currentRoute: '/product-detail'),
+        appBar:
+            const SharedAppBar(currentRoute: '/product-detail', showBack: true),
+        body: Center(
+          child: Text(_error ?? 'Something went wrong',
+              style: GoogleFonts.inter(color: AppColors.muted)),
+        ),
+      );
+    }
+
+    final piece = _piece!;
+    final imagesB64 = _getImageB64List();
+    final tag = _getTag();
     final w = MediaQuery.of(context).size.width;
+    final designerName = piece.sellerStudioName ?? piece.sellerUsername ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.surface,
       drawer: const AppDrawer(currentRoute: '/product-detail'),
-      appBar: const SharedAppBar(currentRoute: '/product-detail', showBack: true),
+      appBar:
+          const SharedAppBar(currentRoute: '/product-detail', showBack: true),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -61,134 +162,152 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             // ═══════════════════════════════════════════════════
             SizedBox(
               height: w * 0.95,
-              child: Stack(
-                children: [
-                  PageView.builder(
-                    controller: _pageCtrl,
-                    itemCount: images.length,
-                    onPageChanged: (p) => setState(() => _currentPage = p),
-                    itemBuilder: (_, i) => GestureDetector(
-                      onDoubleTap: () => _openImageViewer(
-                          context, images, i),
-                      child: Container(color: images[i]),
-                    ),
-                  ),
-                  // Tag pill
-                  Positioned(
-                    top: 14,
-                    left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(alpha: 0.78),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        product.tag,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.inkSoft,
-                          letterSpacing: 0.3,
+              child: imagesB64.isEmpty
+                  ? Container(
+                      color: AppColors.hairline,
+                      alignment: Alignment.center,
+                      child: Icon(Icons.image_outlined,
+                          size: 48, color: AppColors.muted),
+                    )
+                  : Stack(
+                      children: [
+                        PageView.builder(
+                          controller: _pageCtrl,
+                          itemCount: imagesB64.length,
+                          onPageChanged: (p) =>
+                              setState(() => _currentPage = p),
+                          itemBuilder: (_, i) => GestureDetector(
+                            onDoubleTap: () =>
+                                _openImageViewer(context, imagesB64, i),
+                            child: Image.memory(
+                              base64Decode(imagesB64[i]),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
-                  // Dots + arrow controls
-                  if (images.length > 1)
-                    Positioned(
-                      bottom: 14,
-                      left: 16,
-                      right: 16,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Prev button
-                          GestureDetector(
-                            onTap: _currentPage > 0
-                                ? () => _pageCtrl.previousPage(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      curve: Curves.easeOut,
-                                    )
-                                : null,
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: _currentPage > 0
-                                    ? AppColors.ink.withValues(alpha: 0.5)
-                                    : AppColors.ink.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.chevron_left_rounded,
-                                size: 18,
-                                color: _currentPage > 0
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.4),
+                        // Tag pill
+                        Positioned(
+                          top: 14,
+                          left: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface.withValues(alpha: 0.78),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              tag,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.inkSoft,
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          // Dots
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: List.generate(images.length, (i) {
-                              final active = i == _currentPage;
-                              return AnimatedContainer(
-                                duration:
-                                    const Duration(milliseconds: 200),
-                                width: active ? 7 : 5,
-                                height: active ? 7 : 5,
-                                margin: const EdgeInsets.symmetric(
-                                    horizontal: 3),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: active
-                                      ? Colors.white
-                                      : Colors.white
-                                          .withValues(alpha: 0.4),
+                        ),
+                        // Dots + arrow controls
+                        if (imagesB64.length > 1)
+                          Positioned(
+                            bottom: 14,
+                            left: 16,
+                            right: 16,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                GestureDetector(
+                                  onTap: _currentPage > 0
+                                      ? () => _pageCtrl.previousPage(
+                                            duration: const Duration(
+                                                milliseconds: 300),
+                                            curve: Curves.easeOut,
+                                          )
+                                      : null,
+                                  child: Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: _currentPage > 0
+                                          ? AppColors.ink
+                                              .withValues(alpha: 0.5)
+                                          : AppColors.ink
+                                              .withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Icon(
+                                      Icons.chevron_left_rounded,
+                                      size: 18,
+                                      color: _currentPage > 0
+                                          ? Colors.white
+                                          : Colors.white
+                                              .withValues(alpha: 0.4),
+                                    ),
+                                  ),
                                 ),
-                              );
-                            }),
-                          ),
-                          const SizedBox(width: 12),
-                          // Next button
-                          GestureDetector(
-                            onTap: _currentPage < images.length - 1
-                                ? () => _pageCtrl.nextPage(
+                                const SizedBox(width: 12),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: List.generate(imagesB64.length,
+                                      (i) {
+                                    final active = i == _currentPage;
+                                    return AnimatedContainer(
                                       duration:
-                                          const Duration(milliseconds: 300),
-                                      curve: Curves.easeOut,
-                                    )
-                                : null,
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: _currentPage < images.length - 1
-                                    ? AppColors.ink.withValues(alpha: 0.5)
-                                    : AppColors.ink.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.chevron_right_rounded,
-                                size: 18,
-                                color: _currentPage < images.length - 1
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.4),
-                              ),
+                                          const Duration(milliseconds: 200),
+                                      width: active ? 7 : 5,
+                                      height: active ? 7 : 5,
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 3),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: active
+                                            ? Colors.white
+                                            : Colors.white
+                                                .withValues(alpha: 0.4),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                                const SizedBox(width: 12),
+                                GestureDetector(
+                                  onTap: _currentPage < imagesB64.length - 1
+                                      ? () => _pageCtrl.nextPage(
+                                            duration: const Duration(
+                                                milliseconds: 300),
+                                            curve: Curves.easeOut,
+                                          )
+                                      : null,
+                                  child: Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          _currentPage < imagesB64.length - 1
+                                              ? AppColors.ink
+                                                  .withValues(alpha: 0.5)
+                                              : AppColors.ink
+                                                  .withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 18,
+                                      color:
+                                          _currentPage < imagesB64.length - 1
+                                              ? Colors.white
+                                              : Colors.white
+                                                  .withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
-                ],
-              ),
             ),
 
             // ═══════════════════════════════════════════════════
@@ -198,7 +317,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
               child: Row(
                 children: [
-                  // Authenticated badge
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -217,25 +335,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ],
                   ),
                   const Spacer(),
-                  // Save button
                   ListenableBuilder(
                     listenable: CollectionService.instance,
                     builder: (context, _) {
                       final saved = CollectionService.instance
-                          .isProductSaved(widget.productId);
+                          .isProductSaved(widget.pieceId);
                       return GestureDetector(
                         onTap: () => CollectionService.instance
-                            .toggleSaved(widget.productId),
+                            .toggleSaved(widget.pieceId),
                         onLongPress: () => SaveToCollectionModal.show(
-                            context, widget.productId),
+                            context, widget.pieceId),
                         child: Icon(
                           saved
                               ? Icons.bookmark_rounded
                               : Icons.bookmark_border_rounded,
                           size: 22,
-                          color: saved
-                              ? AppColors.inkStrong
-                              : AppColors.inkSoft,
+                          color:
+                              saved ? AppColors.inkStrong : AppColors.inkSoft,
                         ),
                       );
                     },
@@ -245,16 +361,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
 
             // ═══════════════════════════════════════════════════
-            // ── 3. Edition + Suite + Year ────────────────────
+            // ── 3. Edition + Title + Year ─────────────────────
             // ═══════════════════════════════════════════════════
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (product.edition != null)
+                  if (piece.edition != null)
                     Text(
-                      'Edition ${product.edition}',
+                      'Edition ${piece.edition}',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -262,65 +378,56 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         letterSpacing: 0.5,
                       ),
                     ),
-                  if (product.suite != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    piece.title,
+                    style: GoogleFonts.fraunces(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      fontStyle: FontStyle.italic,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                  if (piece.year != null) ...[
                     const SizedBox(height: 4),
                     Text(
-                      product.suite!,
-                      style: GoogleFonts.fraunces(
-                        fontSize: 15,
+                      piece.year!,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
                         fontWeight: FontWeight.w400,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.inkSoft,
+                        color: AppColors.muted,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 4),
-                  Text(
-                    product.year,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.muted,
-                    ),
-                  ),
                 ],
               ),
             ),
 
             // ═══════════════════════════════════════════════════
-            // ── 4. Designer + Location ───────────────────────
+            // ── 4. Designer / Seller ─────────────────────────
             // ═══════════════════════════════════════════════════
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Row(
                 children: [
-                  // Avatar + name tappable area
                   Expanded(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
-                        final profile =
-                            findProfileByName(product.designer);
-                        if (profile != null) {
-                          Navigator.of(context).push(
-                            PageRouteBuilder(
-                              pageBuilder: (_, _, _) =>
-                                  UserProfileScreen(
-                                      userId: profile.id),
-                              transitionsBuilder:
-                                  (_, animation, _, child) =>
-                                      FadeTransition(
-                                          opacity: animation,
-                                          child: child),
-                              transitionDuration:
-                                  const Duration(milliseconds: 300),
-                            ),
-                          );
-                        }
+                        Navigator.of(context).push(
+                          PageRouteBuilder(
+                            pageBuilder: (_, _, _) =>
+                                UserProfileScreen(userId: piece.userId.toString()),
+                            transitionsBuilder: (_, animation, _, child) =>
+                                FadeTransition(
+                                    opacity: animation, child: child),
+                            transitionDuration:
+                                const Duration(milliseconds: 300),
+                          ),
+                        );
                       },
                       child: Row(
                         children: [
-                          // Avatar placeholder
                           Container(
                             width: 36,
                             height: 36,
@@ -330,7 +437,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             ),
                             alignment: Alignment.center,
                             child: Text(
-                              product.designer[0],
+                              designerName.isNotEmpty
+                                  ? designerName[0].toUpperCase()
+                                  : '?',
                               style: GoogleFonts.inter(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
@@ -343,37 +452,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      product.designer,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.inkStrong,
-                                      ),
-                                    ),
-                                    if (product.verified) ...[
-                                      const SizedBox(width: 4),
-                                      Icon(Icons.verified,
-                                          size: 14, color: AppColors.sage),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 1),
                                 Text(
-                                  [
-                                    if (product.location != null)
-                                      product.location!,
-                                    if (product.category != null)
-                                      product.category!,
-                                  ].join(' · '),
+                                  designerName,
                                   style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w400,
-                                    color: AppColors.muted,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.inkStrong,
                                   ),
                                 ),
+                                if (piece.discipline != null) ...[
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    piece.discipline!,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400,
+                                      color: AppColors.muted,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -382,21 +479,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Follow button
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      border:
-                          Border.all(color: AppColors.hairline, width: 1),
-                    ),
-                    child: Text(
-                      'Follow',
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkSoft,
+                  GestureDetector(
+                    onTap: () async {
+                      await FollowService.instance.follow(piece.userId);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        border:
+                            Border.all(color: AppColors.hairline, width: 1),
+                      ),
+                      child: Text(
+                        'Follow',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.inkSoft,
+                        ),
                       ),
                     ),
                   ),
@@ -413,98 +514,99 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             // ═══════════════════════════════════════════════════
             // ── 5. № 01 — About ──────────────────────────────
             // ═══════════════════════════════════════════════════
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '№ 01',
-                          style: GoogleFonts.fraunces(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                            fontStyle: FontStyle.italic,
-                            color: AppColors.gold,
-                            height: 1.3,
-                          ),
-                        ),
-                        TextSpan(
-                          text: ' — About',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.muted,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  GestureDetector(
-                    onTap: () =>
-                        setState(() => _descExpanded = !_descExpanded),
-                    child: AnimatedCrossFade(
-                      duration: const Duration(milliseconds: 250),
-                      crossFadeState: _descExpanded
-                          ? CrossFadeState.showSecond
-                          : CrossFadeState.showFirst,
-                      firstChild: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            if (piece.description != null && piece.description!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RichText(
+                      text: TextSpan(
                         children: [
-                          Text(
-                            product.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
+                          TextSpan(
+                            text: '№ 01',
+                            style: GoogleFonts.fraunces(
                               fontSize: 14,
                               fontWeight: FontWeight.w400,
-                              color: AppColors.inkSoft,
-                              height: 1.7,
+                              fontStyle: FontStyle.italic,
+                              color: AppColors.gold,
+                              height: 1.3,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Read more',
+                          TextSpan(
+                            text: ' — About',
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.inkStrong,
-                            ),
-                          ),
-                        ],
-                      ),
-                      secondChild: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            product.description,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
                               fontWeight: FontWeight.w400,
-                              color: AppColors.inkSoft,
-                              height: 1.7,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Show less',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.inkStrong,
+                              color: AppColors.muted,
+                              height: 1.3,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    GestureDetector(
+                      onTap: () =>
+                          setState(() => _descExpanded = !_descExpanded),
+                      child: AnimatedCrossFade(
+                        duration: const Duration(milliseconds: 250),
+                        crossFadeState: _descExpanded
+                            ? CrossFadeState.showSecond
+                            : CrossFadeState.showFirst,
+                        firstChild: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              piece.description!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.inkSoft,
+                                height: 1.7,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Read more',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.inkStrong,
+                              ),
+                            ),
+                          ],
+                        ),
+                        secondChild: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              piece.description!,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.inkSoft,
+                                height: 1.7,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Show less',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.inkStrong,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
             const SizedBox(height: 24),
             const Padding(
@@ -546,54 +648,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _SpecRow(label: 'Year', value: product.year),
-                  if (product.materials != null)
-                    _SpecRow(label: 'Materials', value: product.materials!),
-                  if (product.dimensions != null)
+                  if (piece.year != null)
+                    _SpecRow(label: 'Year', value: piece.year!),
+                  if (piece.discipline != null)
+                    _SpecRow(label: 'Discipline', value: piece.discipline!),
+                  if (piece.packaging != null)
+                    _SpecRow(label: 'Packaging', value: piece.packaging!),
+                  _SpecRow(
+                      label: 'Stock', value: piece.stock.toString()),
+                  if (piece.shipsTo != null && piece.shipsTo!.isNotEmpty)
                     _SpecRow(
-                        label: 'Dimensions', value: product.dimensions!),
-                  if (product.weight != null)
-                    _SpecRow(label: 'Weight', value: product.weight!),
-                  if (product.condition != null)
-                    _SpecRow(label: 'Condition', value: product.condition!),
+                        label: 'Ships to',
+                        value: piece.shipsTo!.join(', ')),
                 ],
               ),
             ),
-
-            // ═══════════════════════════════════════════════════
-            // ── 7. Tags ──────────────────────────────────────
-            // ═══════════════════════════════════════════════════
-            if (product.tags.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: product.tags
-                      .map(
-                        (t) => Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 7),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                                color: AppColors.hairline, width: 1),
-                          ),
-                          child: Text(
-                            t,
-                            style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.muted,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ],
 
             const SizedBox(height: 24),
             const Padding(
@@ -602,7 +671,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
 
             // ═══════════════════════════════════════════════════
-            // ── 8. Price + Actions ───────────────────────────
+            // ── 7. Price + Actions ───────────────────────────
             // ═══════════════════════════════════════════════════
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
@@ -610,7 +679,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _priceLabel(product.tag),
+                    _priceLabel(tag),
                     style: GoogleFonts.inter(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w500,
@@ -619,13 +688,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  if (product.oldPrice != null) ...[
+                  if (piece.oldPriceCents != null) ...[
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          product.oldPrice!,
+                          '€${(piece.oldPriceCents! / 100).toStringAsFixed(2)}',
                           style: GoogleFonts.fraunces(
                             fontSize: 20,
                             fontWeight: FontWeight.w400,
@@ -637,7 +706,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          product.price,
+                          piece.priceFormatted,
                           style: GoogleFonts.fraunces(
                             fontSize: 28,
                             fontWeight: FontWeight.w400,
@@ -649,7 +718,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ] else
                     Text(
-                      product.price,
+                      piece.priceFormatted,
                       style: GoogleFonts.fraunces(
                         fontSize: 28,
                         fontWeight: FontWeight.w400,
@@ -657,6 +726,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         height: 1.1,
                       ),
                     ),
+                  // Rental rate info
+                  if (piece.rental && piece.rentalDailyRateCents != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Rental: €${(piece.rentalDailyRateCents! / 100).toStringAsFixed(2)}/day',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -666,10 +747,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
               child: Row(
                 children: [
-                  // Primary button
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {},
+                      onTap: () => _handlePrimaryAction(tag),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         decoration: BoxDecoration(
@@ -678,7 +758,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         alignment: Alignment.center,
                         child: Text(
-                          _actionLabel(product.tag),
+                          _actionLabel(tag),
                           style: GoogleFonts.inter(
                             fontSize: 13.5,
                             fontWeight: FontWeight.w500,
@@ -690,10 +770,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Secondary button
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {},
+                      onTap: () {
+                        // Make an offer = start conversation with seller
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Offer feature coming soon')),
+                        );
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         decoration: BoxDecoration(
@@ -724,20 +809,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       ),
     );
   }
-
-  String _priceLabel(String tag) => switch (tag) {
-        'Rent' => 'RENTAL PRICE',
-        'Buy or Rent' => 'SALE PRICE',
-        _ => 'SALE PRICE',
-      };
-
-  String _actionLabel(String tag) => switch (tag) {
-        'Sell' => 'Buy now',
-        'Buy' => 'Buy now',
-        'Rent' => 'Request rental',
-        'Buy or Rent' => 'Buy or rent',
-        _ => 'Contact seller',
-      };
 }
 
 // ── Specification row ────────────────────────────────────────
@@ -784,10 +855,10 @@ class _SpecRow extends StatelessWidget {
 // ── Fullscreen image viewer with zoom ────────────────────────
 
 class _FullScreenImageViewer extends StatefulWidget {
-  final List<Color> images;
+  final List<String> imagesB64;
   final int initialIndex;
   const _FullScreenImageViewer(
-      {required this.images, required this.initialIndex});
+      {required this.imagesB64, required this.initialIndex});
 
   @override
   State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
@@ -812,13 +883,12 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
 
   @override
   Widget build(BuildContext context) {
-    final images = widget.images;
+    final images = widget.imagesB64;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Zoomable paged images
           PageView.builder(
             controller: _pageCtrl,
             itemCount: images.length,
@@ -827,10 +897,11 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
               minScale: 1.0,
               maxScale: 4.0,
               child: Center(
-                child: Container(
+                child: Image.memory(
+                  base64Decode(images[i]),
+                  fit: BoxFit.contain,
                   width: double.infinity,
                   height: double.infinity,
-                  color: images[i],
                 ),
               ),
             ),
@@ -868,7 +939,6 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Prev
                   GestureDetector(
                     onTap: _current > 0
                         ? () => _pageCtrl.previousPage(
@@ -894,7 +964,6 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  // Next
                   GestureDetector(
                     onTap: _current < images.length - 1
                         ? () => _pageCtrl.nextPage(

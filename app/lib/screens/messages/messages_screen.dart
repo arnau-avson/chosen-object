@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/message_service.dart';
-import '../../models/user_profile.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
 
@@ -57,12 +56,12 @@ class _MessagesScreenState extends State<MessagesScreen>
   }
 
   void _openConversation(Conversation conv) {
-    final profile = findProfileById(conv.participantId);
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, _, _) => _ConversationScreen(
           conversationId: conv.id,
-          participantName: profile.name,
+          participantName: conv.otherUsername ?? 'Unknown',
+          otherUserId: conv.otherUserId,
         ),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
@@ -394,10 +393,13 @@ class _ConversationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profile = findProfileById(conversation.participantId);
-    final unread = !conversation.isRead;
+    final name = conversation.otherUsername ?? 'Unknown';
+    final avatarColor = Color(int.parse(
+        'FF${conversation.otherAvatarColor.replaceFirst('#', '')}',
+        radix: 16));
+    final unread = conversation.unreadCount > 0;
     final initials =
-        profile.name.split(' ').map((w) => w[0]).take(2).join();
+        name.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join();
 
     return Column(
       children: [
@@ -425,7 +427,7 @@ class _ConversationRow extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: profile.avatarColor,
+                    color: avatarColor,
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
@@ -450,7 +452,7 @@ class _ConversationRow extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              profile.name,
+                              name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
@@ -462,19 +464,20 @@ class _ConversationRow extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            _formatTimestamp(conversation.lastTimestamp),
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.muted,
+                          if (conversation.lastMessageAt != null)
+                            Text(
+                              _formatTimestamp(conversation.lastMessageAt!),
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.muted,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        conversation.lastMessagePreview,
+                        conversation.lastMessage ?? '',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
@@ -511,9 +514,12 @@ class _RequestRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profile = findProfileById(conversation.participantId);
+    final name = conversation.otherUsername ?? 'Unknown';
+    final avatarColor = Color(int.parse(
+        'FF${conversation.otherAvatarColor.replaceFirst('#', '')}',
+        radix: 16));
     final initials =
-        profile.name.split(' ').map((w) => w[0]).take(2).join();
+        name.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join();
 
     return Column(
       children: [
@@ -532,7 +538,7 @@ class _RequestRow extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: profile.avatarColor,
+                    color: avatarColor,
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
@@ -557,7 +563,7 @@ class _RequestRow extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              profile.name,
+                              name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
@@ -568,19 +574,20 @@ class _RequestRow extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            _formatTimestamp(conversation.lastTimestamp),
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.muted,
+                          if (conversation.lastMessageAt != null)
+                            Text(
+                              _formatTimestamp(conversation.lastMessageAt!),
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.muted,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        conversation.lastMessagePreview,
+                        conversation.lastMessage ?? '',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
@@ -702,11 +709,13 @@ bool _isDifferentDay(DateTime a, DateTime b) =>
 // ═════════════════════════════════════════════════════════════
 
 class _ConversationScreen extends StatefulWidget {
-  final String conversationId;
+  final int conversationId;
   final String participantName;
+  final int otherUserId;
   const _ConversationScreen({
     required this.conversationId,
     required this.participantName,
+    required this.otherUserId,
   });
 
   @override
@@ -719,9 +728,11 @@ class _ConversationScreenState extends State<_ConversationScreen>
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   ChatMessage? _replyingTo;
-  String? _highlightedMessageId;
+  int? _highlightedMessageId;
   Timer? _highlightTimer;
-  final Map<String, GlobalKey> _messageKeys = {};
+  final Map<int, GlobalKey> _messageKeys = {};
+  List<ChatMessage> _messages = [];
+  bool _loadingMessages = true;
 
   Animation<double> _fade(double start, double end) => CurvedAnimation(
         parent: _anim,
@@ -737,15 +748,28 @@ class _ConversationScreenState extends State<_ConversationScreen>
       duration: const Duration(milliseconds: 600),
     )..forward();
 
+    _loadMessages();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MessageService.instance.markAsRead(widget.conversationId);
     });
   }
 
-  GlobalKey _keyFor(String messageId) =>
+  Future<void> _loadMessages() async {
+    final messages =
+        await MessageService.instance.fetchMessages(widget.conversationId);
+    if (mounted) {
+      setState(() {
+        _messages = messages;
+        _loadingMessages = false;
+      });
+    }
+  }
+
+  GlobalKey _keyFor(int messageId) =>
       _messageKeys.putIfAbsent(messageId, () => GlobalKey());
 
-  void _scrollToMessage(String messageId) {
+  void _scrollToMessage(int messageId) {
     final key = _messageKeys[messageId];
     if (key?.currentContext != null) {
       Scrollable.ensureVisible(
@@ -771,16 +795,21 @@ class _ConversationScreenState extends State<_ConversationScreen>
     super.dispose();
   }
 
-  void _sendMessage() {
+  void _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-    MessageService.instance.sendMessage(
+    final sent = await MessageService.instance.sendMessage(
       widget.conversationId,
       text,
       replyToId: _replyingTo?.id,
     );
     _textController.clear();
     setState(() => _replyingTo = null);
+    if (sent != null && mounted) {
+      setState(() {
+        _messages.add(sent);
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -790,6 +819,18 @@ class _ConversationScreenState extends State<_ConversationScreen>
         );
       }
     });
+  }
+
+  /// Find the conversation object from the service lists.
+  Conversation? _findConversation() {
+    final all = [
+      ...MessageService.instance.accepted,
+      ...MessageService.instance.requests,
+    ];
+    for (final c in all) {
+      if (c.id == widget.conversationId) return c;
+    }
+    return null;
   }
 
   @override
@@ -804,19 +845,23 @@ class _ConversationScreenState extends State<_ConversationScreen>
       body: ListenableBuilder(
         listenable: MessageService.instance,
         builder: (context, _) {
-          final conv = MessageService.instance.findById(widget.conversationId);
-          final profile = findProfileById(conv.participantId);
-          final messages = conv.messages;
+          final conv = _findConversation();
           final isUnacceptedRequest =
-              conv.isRequest && !conv.requestAccepted;
+              conv != null && conv.isRequest && !conv.requestAccepted;
+
+          if (_loadingMessages) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final messages = _messages;
 
           // Build items list: messages + date separators
           final items = <_ChatItem>[];
           for (var i = 0; i < messages.length; i++) {
             if (i == 0 ||
                 _isDifferentDay(
-                    messages[i].timestamp, messages[i - 1].timestamp)) {
-              items.add(_ChatItem.separator(messages[i].timestamp));
+                    messages[i].createdAt, messages[i - 1].createdAt)) {
+              items.add(_ChatItem.separator(messages[i].createdAt));
             }
             items.add(_ChatItem.message(messages[i]));
           }
@@ -835,7 +880,7 @@ class _ConversationScreenState extends State<_ConversationScreen>
                       children: [
                         Expanded(
                           child: Text(
-                            '${profile.name} wants to message you',
+                            '${widget.participantName} wants to message you',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w400,
@@ -846,7 +891,7 @@ class _ConversationScreenState extends State<_ConversationScreen>
                         const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () => MessageService.instance
-                              .acceptRequest(conv.id),
+                              .acceptRequest(widget.conversationId),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 6),
@@ -868,7 +913,7 @@ class _ConversationScreenState extends State<_ConversationScreen>
                         GestureDetector(
                           onTap: () {
                             MessageService.instance
-                                .declineRequest(conv.id);
+                                .declineRequest(widget.conversationId);
                             Navigator.of(context).pop();
                           },
                           child: Container(
@@ -948,7 +993,7 @@ class _ConversationScreenState extends State<_ConversationScreen>
                       }
 
                       final msg = item.chatMessage!;
-                      final isMine = msg.senderId == 'me';
+                      final isMine = msg.senderId != widget.otherUserId;
 
                       // Determine if this is the last consecutive message
                       // from the same sender (gets the tail).
@@ -967,7 +1012,9 @@ class _ConversationScreenState extends State<_ConversationScreen>
                         child: _ChatBubble(
                           message: msg,
                           isMine: isMine,
-                          conversationId: widget.conversationId,
+                          otherUserId: widget.otherUserId,
+                          otherUsername: widget.participantName,
+                          messages: _messages,
                           onReply: (m) => setState(() => _replyingTo = m),
                           isHighlighted: _highlightedMessageId == msg.id,
                           isLastInGroup: isLastInGroup,
@@ -990,7 +1037,8 @@ class _ConversationScreenState extends State<_ConversationScreen>
                   onSend: _sendMessage,
                   replyingTo: _replyingTo,
                   onCancelReply: () => setState(() => _replyingTo = null),
-                  conversationId: widget.conversationId,
+                  otherUserId: widget.otherUserId,
+                  otherUsername: widget.participantName,
                 ),
               ),
             ],
@@ -1028,7 +1076,9 @@ class _ChatItem {
 class _ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMine;
-  final String conversationId;
+  final int otherUserId;
+  final String otherUsername;
+  final List<ChatMessage> messages;
   final void Function(ChatMessage) onReply;
   final bool isHighlighted;
   final bool isLastInGroup;
@@ -1037,7 +1087,9 @@ class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.message,
     required this.isMine,
-    required this.conversationId,
+    required this.otherUserId,
+    required this.otherUsername,
+    required this.messages,
     required this.onReply,
     this.isHighlighted = false,
     this.isLastInGroup = true,
@@ -1080,7 +1132,7 @@ class _ChatBubble extends StatelessWidget {
               child: _ReactionBar(
                 onSelect: (emoji) {
                   MessageService.instance
-                      .reactToMessage(conversationId, message.id, emoji);
+                      .reactToMessage(message.id, emoji);
                   Navigator.of(ctx).pop();
                 },
               ),
@@ -1091,21 +1143,22 @@ class _ChatBubble extends StatelessWidget {
     );
   }
 
-  String _profileName(String senderId) {
-    try {
-      return findProfileById(senderId).name;
-    } catch (_) {
-      return 'Unknown';
-    }
+  String _senderName(int senderId) {
+    if (senderId != otherUserId) return 'You';
+    return otherUsername;
   }
 
   Widget _buildReplyQuote() {
-    final original = MessageService.instance
-        .findMessageInConversation(conversationId, message.replyToId!);
+    ChatMessage? original;
+    for (final m in messages) {
+      if (m.id == message.replyToId) {
+        original = m;
+        break;
+      }
+    }
     if (original == null) return const SizedBox.shrink();
 
-    final senderName =
-        original.senderId == 'me' ? 'You' : _profileName(original.senderId);
+    final senderName = _senderName(original.senderId);
 
     return GestureDetector(
       onTap: onTapReply,
@@ -1240,7 +1293,7 @@ class _ChatBubble extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _formatTime(message.timestamp),
+                          _formatTime(message.createdAt),
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             fontWeight: FontWeight.w400,
@@ -1263,7 +1316,7 @@ class _ChatBubble extends StatelessWidget {
                     right: isMine ? 8 : null,
                     child: GestureDetector(
                       onTap: () => MessageService.instance.reactToMessage(
-                          conversationId, message.id, message.reaction!),
+                          message.id, message.reaction!),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
@@ -1300,7 +1353,8 @@ class _MessageInput extends StatelessWidget {
   final VoidCallback onSend;
   final ChatMessage? replyingTo;
   final VoidCallback? onCancelReply;
-  final String conversationId;
+  final int otherUserId;
+  final String otherUsername;
 
   const _MessageInput({
     required this.controller,
@@ -1308,16 +1362,13 @@ class _MessageInput extends StatelessWidget {
     required this.onSend,
     this.replyingTo,
     this.onCancelReply,
-    required this.conversationId,
+    required this.otherUserId,
+    required this.otherUsername,
   });
 
-  String _senderName(String senderId) {
-    if (senderId == 'me') return 'You';
-    try {
-      return findProfileById(senderId).name;
-    } catch (_) {
-      return 'Unknown';
-    }
+  String _senderName(int senderId) {
+    if (senderId != otherUserId) return 'You';
+    return otherUsername;
   }
 
   @override
