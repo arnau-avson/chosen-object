@@ -145,6 +145,39 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  // ── POST multipart with multiple files ────────────────────
+
+  Future<Map<String, dynamic>> postMultipartMultiFile(
+    String path, {
+    Map<String, String> fields = const {},
+    required List<Uint8List> files,
+    String fileField = 'files',
+  }) async {
+    final token = await _getToken();
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl$path'),
+    );
+
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    request.fields.addAll(fields);
+
+    for (var i = 0; i < files.length; i++) {
+      request.files.add(http.MultipartFile.fromBytes(
+        fileField,
+        files[i],
+        filename: 'image_$i.jpg',
+      ));
+    }
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    return _handleResponse(response);
+  }
+
   // ── Response handling ─────────────────────────────────────
 
   dynamic _handleResponse(http.Response response) {

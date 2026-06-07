@@ -1,8 +1,14 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../core/app_colors.dart';
+import '../../core/piece_service.dart';
 import '../../core/profile_service.dart';
-import '../../models/product.dart';
 import '../../widgets/shared_app_bar.dart';
 import '../home/home_screen.dart';
 
@@ -22,7 +28,8 @@ const _disciplines = [
 ];
 
 class ListPieceScreen extends StatefulWidget {
-  const ListPieceScreen({super.key});
+  final int? editPieceId;
+  const ListPieceScreen({super.key, this.editPieceId});
 
   @override
   State<ListPieceScreen> createState() => _ListPieceScreenState();
@@ -36,8 +43,16 @@ class _ListPieceScreenState extends State<ListPieceScreen>
   bool _published = false;
   String _publishedTitle = '';
 
+  // Edit mode
+  bool get _isEditing => widget.editPieceId != null;
+  bool _loadingPiece = false;
+  final List<int?> _imageIds = []; // null = new image, int = existing server id
+  final List<int> _removedImageIds = [];
+
   // Step 1 — Photos
-  final List<Color> _images = [];
+  final _picker = ImagePicker();
+  final List<Uint8List> _images = [];
+  bool _isPublishing = false;
 
   // Step 2 — Details
   final _titleCtrl = TextEditingController();
@@ -56,15 +71,6 @@ class _ListPieceScreenState extends State<ListPieceScreen>
   final Set<String> _shipsTo = {};
   String _packaging = 'Standard';
 
-  // Color palette for mock image picker
-  static const _palette = <Color>[
-    Color(0xFFBEB0A0), Color(0xFFA89888), Color(0xFFD4C8B8),
-    Color(0xFFCBC2B4), Color(0xFFB5A898), Color(0xFFA8997E),
-    Color(0xFFC2B5A2), Color(0xFF8A7D6A), Color(0xFF9A8C7B),
-    Color(0xFFBAAD9A), Color(0xFFD0C5B5), Color(0xFFB8AB99),
-    Color(0xFFC5B9A5), Color(0xFFAEA08C), Color(0xFFB3A594),
-    Color(0xFFCABEAE),
-  ];
 
   // ── Animation helpers ──────────────────────────────────────
 
@@ -90,6 +96,40 @@ class _ListPieceScreenState extends State<ListPieceScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+
+    if (_isEditing) _loadExistingPiece();
+  }
+
+  Future<void> _loadExistingPiece() async {
+    setState(() => _loadingPiece = true);
+    try {
+      final piece = await PieceService.instance.fetchPiece(widget.editPieceId!);
+
+      _titleCtrl.text = piece.title;
+      _discipline = piece.discipline;
+      _yearCtrl.text = piece.year ?? '';
+      _editionCtrl.text = piece.edition ?? '';
+      _priceCtrl.text = (piece.priceCents ~/ 100).toString();
+      if (piece.oldPriceCents != null) {
+        _oldPriceCtrl.text = (piece.oldPriceCents! ~/ 100).toString();
+      }
+      if (piece.costPriceCents != null) {
+        _costPriceCtrl.text = (piece.costPriceCents! ~/ 100).toString();
+      }
+      _rental = piece.rental;
+      _stockCtrl.text = piece.stock.toString();
+      if (piece.shipsTo != null) _shipsTo.addAll(piece.shipsTo!);
+      _packaging = piece.packaging ?? 'Standard';
+
+      for (final img in piece.images) {
+        _images.add(img.bytes);
+        _imageIds.add(img.id);
+      }
+    } catch (_) {
+      // Failed to load — stay on empty form
+    }
+    if (!mounted) return;
+    setState(() => _loadingPiece = false);
   }
 
   @override
@@ -126,7 +166,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
     }
   }
 
-  void _publish() {
+  Future<void> _publish() async {
     final price = int.tryParse(_priceCtrl.text.trim());
     if (price == null || _titleCtrl.text.trim().isEmpty || _images.isEmpty) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -149,112 +189,143 @@ class _ListPieceScreenState extends State<ListPieceScreen>
       return;
     }
 
-    final oldPrice = int.tryParse(_oldPriceCtrl.text.trim());
-    final costPrice = int.tryParse(_costPriceCtrl.text.trim());
-    final stock = int.tryParse(_stockCtrl.text.trim()) ?? 1;
-    final id =
-        _titleCtrl.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
+    setState(() => _isPublishing = true);
 
-    mockProducts.insert(
-      0,
-      Product(
-        id: id,
-        name: _titleCtrl.text.trim(),
-        designer: ProfileService.instance.name,
-        price: '€${_formatPrice(price)}',
-        oldPrice: oldPrice != null ? '€${_formatPrice(oldPrice)}' : null,
-        tag: _rental ? 'Buy or Rent' : 'Sell',
-        year: _yearCtrl.text.trim(),
-        images: List.of(_images),
-        category: _discipline,
-        edition: _editionCtrl.text.trim().isNotEmpty
-            ? _editionCtrl.text.trim()
-            : null,
-        location: ProfileService.instance.location,
-        stock: stock,
-        costPrice: costPrice != null ? '€${_formatPrice(costPrice)}' : null,
-      ),
-    );
+    try {
+      final oldPrice = int.tryParse(_oldPriceCtrl.text.trim());
+      final costPrice = int.tryParse(_costPriceCtrl.text.trim());
+      final stock = int.tryParse(_stockCtrl.text.trim()) ?? 1;
 
-    setState(() {
-      _publishedTitle = _titleCtrl.text.trim();
-      _published = true;
-    });
-  }
+      if (_isEditing) {
+        final pieceId = widget.editPieceId!;
 
-  String _formatPrice(int n) {
-    if (n < 1000) return '$n';
-    final s = n.toString();
-    final buffer = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buffer.write(',');
-      buffer.write(s[i]);
-    }
-    return buffer.toString();
-  }
+        // Update metadata
+        await PieceService.instance.updatePiece(pieceId, {
+          'title': _titleCtrl.text.trim(),
+          'discipline': _discipline,
+          'year': _yearCtrl.text.trim().isNotEmpty
+              ? _yearCtrl.text.trim()
+              : null,
+          'edition': _editionCtrl.text.trim().isNotEmpty
+              ? _editionCtrl.text.trim()
+              : null,
+          'price_cents': price * 100,
+          'old_price_cents': oldPrice != null ? oldPrice * 100 : null,
+          'cost_price_cents': costPrice != null ? costPrice * 100 : null,
+          'rental': _rental,
+          'stock': stock,
+          'ships_to': _shipsTo.toList(),
+          'packaging': _packaging,
+        });
 
-  // ── Pick color (mock image) ────────────────────────────────
+        // Delete removed images
+        for (final imgId in _removedImageIds) {
+          await PieceService.instance.deleteImage(pieceId, imgId);
+        }
 
-  void _pickImage() {
-    if (_images.length >= 8) return;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.hairline,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Choose a colour (mock image)',
-              style: GoogleFonts.fraunces(
-                fontSize: 18,
+        // Upload new images (those without an existing id)
+        final newImages = <Uint8List>[];
+        for (var i = 0; i < _images.length; i++) {
+          if (i >= _imageIds.length || _imageIds[i] == null) {
+            newImages.add(_images[i]);
+          }
+        }
+        await PieceService.instance.uploadImages(pieceId, newImages);
+
+        // Refresh list in profile
+        PieceService.instance.fetchMyPieces();
+      } else {
+        await PieceService.instance.publishPiece(
+          title: _titleCtrl.text.trim(),
+          discipline: _discipline,
+          year:
+              _yearCtrl.text.trim().isNotEmpty ? _yearCtrl.text.trim() : null,
+          edition: _editionCtrl.text.trim().isNotEmpty
+              ? _editionCtrl.text.trim()
+              : null,
+          priceCents: price * 100,
+          oldPriceCents: oldPrice != null ? oldPrice * 100 : null,
+          costPriceCents: costPrice != null ? costPrice * 100 : null,
+          rental: _rental,
+          stock: stock,
+          shipsTo: _shipsTo.toList(),
+          packaging: _packaging,
+          images: _images,
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isPublishing = false;
+        _publishedTitle = _titleCtrl.text.trim();
+        _published = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isPublishing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to ${_isEditing ? 'update' : 'publish'}: $e',
+            style: GoogleFonts.inter(
+                fontSize: 13,
                 fontWeight: FontWeight.w400,
-                color: AppColors.inkStrong,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _palette.map((c) {
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _images.add(c));
-                    Navigator.pop(ctx);
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: c,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.hairline, width: 1),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-          ],
+                color: AppColors.bone),
+          ),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
-      ),
+      );
+    }
+  }
+
+  // ── Pick image from gallery ────────────────────────────────
+
+  Future<void> _pickImage() async {
+    if (_images.length >= 8) return;
+
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
     );
+    if (picked == null) return;
+
+    // image_cropper not available on desktop — skip crop step
+    if (Platform.isAndroid || Platform.isIOS) {
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        compressQuality: 80,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop photo',
+            toolbarColor: const Color(0xFF2E2520),
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: AppColors.accent,
+            lockAspectRatio: false,
+          ),
+          IOSUiSettings(
+            title: 'Crop photo',
+            aspectRatioLockEnabled: false,
+            resetAspectRatioEnabled: true,
+          ),
+        ],
+      );
+      if (cropped == null) return;
+      final bytes = await File(cropped.path).readAsBytes();
+      setState(() {
+        _images.add(bytes);
+        _imageIds.add(null);
+      });
+    } else {
+      final bytes = await File(picked.path).readAsBytes();
+      setState(() {
+        _images.add(bytes);
+        _imageIds.add(null);
+      });
+    }
   }
 
   void _pickDiscipline() {
@@ -348,7 +419,11 @@ class _ListPieceScreenState extends State<ListPieceScreen>
     return Scaffold(
       backgroundColor: AppColors.bone,
       appBar: const SharedAppBar(currentRoute: '/list', showBack: true),
-      body: Column(
+      body: _loadingPiece
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.ink),
+            )
+          : Column(
         children: [
           // ── Header + step indicator ──
           FadeTransition(
@@ -361,7 +436,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'List a piece',
+                      _isEditing ? 'Edit piece' : 'List a piece',
                       style: GoogleFonts.fraunces(
                         fontSize: 24,
                         fontWeight: FontWeight.w400,
@@ -450,7 +525,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
                         const SizedBox(width: 16),
                         Expanded(
                           child: GestureDetector(
-                            onTap: _publish,
+                            onTap: _isPublishing ? null : _publish,
                             child: Container(
                               padding:
                                   const EdgeInsets.symmetric(vertical: 14),
@@ -459,14 +534,23 @@ class _ListPieceScreenState extends State<ListPieceScreen>
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               alignment: Alignment.center,
-                              child: Text(
-                                'Publish',
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.bone,
-                                ),
-                              ),
+                              child: _isPublishing
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.bone,
+                                      ),
+                                    )
+                                  : Text(
+                                      _isEditing ? 'Update' : 'Publish',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.bone,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
@@ -567,7 +651,9 @@ class _ListPieceScreenState extends State<ListPieceScreen>
               const SizedBox(height: 28),
 
               Text(
-                'Piece listed successfully',
+                _isEditing
+                    ? 'Piece updated'
+                    : 'Piece listed successfully',
                 style: GoogleFonts.fraunces(
                   fontSize: 24,
                   fontWeight: FontWeight.w400,
@@ -578,7 +664,9 @@ class _ListPieceScreenState extends State<ListPieceScreen>
               const SizedBox(height: 12),
 
               Text(
-                '"$_publishedTitle" is now live and visible to buyers.',
+                _isEditing
+                    ? '"$_publishedTitle" has been updated.'
+                    : '"$_publishedTitle" is now live and visible to buyers.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 14,
@@ -590,17 +678,21 @@ class _ListPieceScreenState extends State<ListPieceScreen>
 
               const Spacer(flex: 4),
 
-              // Go to Home button
+              // Action button
               GestureDetector(
                 onTap: () {
-                  Navigator.of(context).pushReplacement(
-                    PageRouteBuilder(
-                      pageBuilder: (_, _, _) => const HomeScreen(),
-                      transitionsBuilder: (_, animation, _, child) =>
-                          FadeTransition(opacity: animation, child: child),
-                      transitionDuration: const Duration(milliseconds: 300),
-                    ),
-                  );
+                  if (_isEditing) {
+                    Navigator.of(context).pop();
+                  } else {
+                    Navigator.of(context).pushReplacement(
+                      PageRouteBuilder(
+                        pageBuilder: (_, _, _) => const HomeScreen(),
+                        transitionsBuilder: (_, animation, _, child) =>
+                            FadeTransition(opacity: animation, child: child),
+                        transitionDuration: const Duration(milliseconds: 300),
+                      ),
+                    );
+                  }
                 },
                 child: Container(
                   width: double.infinity,
@@ -611,7 +703,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    'Go to Home',
+                    _isEditing ? 'Back to profile' : 'Go to Home',
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -665,8 +757,14 @@ class _ListPieceScreenState extends State<ListPieceScreen>
                   children: [
                     Container(
                       decoration: BoxDecoration(
-                        color: _images[i],
                         borderRadius: BorderRadius.circular(8),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.memory(
+                        _images[i],
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
                       ),
                     ),
                     // Cover label
@@ -701,7 +799,13 @@ class _ListPieceScreenState extends State<ListPieceScreen>
                       top: 4,
                       right: 4,
                       child: GestureDetector(
-                        onTap: () => setState(() => _images.removeAt(i)),
+                        onTap: () => setState(() {
+                          if (i < _imageIds.length && _imageIds[i] != null) {
+                            _removedImageIds.add(_imageIds[i]!);
+                          }
+                          _images.removeAt(i);
+                          if (i < _imageIds.length) _imageIds.removeAt(i);
+                        }),
                         child: Container(
                           width: 20,
                           height: 20,
@@ -1008,7 +1112,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
         : null;
     final designer = ProfileService.instance.name;
     final year = _yearCtrl.text.trim();
-    final previewImages = _images.isNotEmpty ? _images : [AppColors.hairline];
+    final previewImages = _images;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1187,7 +1291,7 @@ class _Chip extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════
 
 class _PreviewContent extends StatefulWidget {
-  final List<Color> images;
+  final List<Uint8List> images;
   final String title;
   final String designer;
   final String year;
@@ -1257,8 +1361,12 @@ class _PreviewContentState extends State<_PreviewContent> {
                   controller: _previewPageCtrl,
                   itemCount: widget.images.length,
                   onPageChanged: (p) => setState(() => _page = p),
-                  itemBuilder: (_, i) =>
-                      Container(color: widget.images[i]),
+                  itemBuilder: (_, i) => Image.memory(
+                    widget.images[i],
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
                 ),
                 // Tag pill
                 Positioned(

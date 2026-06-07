@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../../core/collection_service.dart';
+import '../../core/piece_service.dart';
 import '../../core/profile_service.dart';
-import '../../models/product.dart';
+import '../../models/piece.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_spinner.dart';
-import '../../widgets/save_to_collection_modal.dart';
 import '../../widgets/shared_app_bar.dart';
-import '../product_detail/product_detail_screen.dart';
+import '../list_piece/list_piece_screen.dart';
 import 'edit_profile_screen.dart';
 import 'followers_screen.dart';
 
@@ -37,15 +36,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   late final AnimationController _anim;
 
   bool _descExpanded = false;
-
-  // Pagination
-  static const _pageSize = 4;
-  int _displayedCount = _pageSize;
-  bool _loading = false;
-
-  late final List<Product> _userProducts;
-
-  bool get _hasMore => _displayedCount < _userProducts.length;
 
   // ── Animation helpers ──────────────────────────────────────
 
@@ -90,13 +80,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
-    _userProducts = mockProducts
-        .where((p) => p.designer == ProfileService.instance.name)
-        .toList();
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+
+    // Fetch user's pieces from backend
+    PieceService.instance.fetchMyPieces();
   }
 
   @override
@@ -105,32 +95,22 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.dispose();
   }
 
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    setState(() {
-      _displayedCount =
-          (_displayedCount + _pageSize).clamp(0, _userProducts.length);
-      _loading = false;
-    });
-  }
-
   // ── Build ──────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final displayed = _userProducts.take(_displayedCount).toList();
-
     return Scaffold(
       backgroundColor: AppColors.bone,
       appBar: const SharedAppBar(currentRoute: '/profile'),
       drawer: const AppDrawer(currentRoute: '/profile'),
       body: ListenableBuilder(
-        listenable: ProfileService.instance,
+        listenable: Listenable.merge([
+          ProfileService.instance,
+          PieceService.instance,
+        ]),
         builder: (context, _) {
           final p = ProfileService.instance;
+          final pieceService = PieceService.instance;
 
           return SingleChildScrollView(
             child: Column(
@@ -441,7 +421,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       Divider(color: AppColors.hairline, height: 1),
                 ),
 
-                // ── E) Nº01 — About ──
+                // ── E) No 01 — About ──
                 FadeTransition(
                   opacity: _fade(0.28, 0.68),
                   child: SlideTransition(
@@ -456,7 +436,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             text: TextSpan(
                               children: [
                                 TextSpan(
-                                  text: '№ 01',
+                                  text: '\u2116 01',
                                   style: GoogleFonts.fraunces(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w400,
@@ -466,7 +446,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                 ),
                                 TextSpan(
-                                  text: ' — About',
+                                  text: ' \u2014 About',
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w400,
@@ -551,7 +531,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   child: Divider(color: AppColors.hairline, height: 1),
                 ),
 
-                // ── F) Nº02 — Pieces ──
+                // ── F) No 02 — Pieces ──
                 FadeTransition(
                   opacity: _fade(0.35, 0.75),
                   child: SlideTransition(
@@ -565,7 +545,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             text: TextSpan(
                               children: [
                                 TextSpan(
-                                  text: '№ 02',
+                                  text: '\u2116 02',
                                   style: GoogleFonts.fraunces(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w400,
@@ -575,7 +555,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                 ),
                                 TextSpan(
-                                  text: ' — Pieces',
+                                  text: ' \u2014 Pieces',
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w400,
@@ -589,7 +569,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         const SizedBox(height: 16),
 
-                        if (_userProducts.isEmpty)
+                        if (pieceService.loadingPieces)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32),
+                            child: Center(child: LoadingSpinner()),
+                          )
+                        else if (pieceService.pieces.isEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 24, vertical: 32),
@@ -611,44 +596,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                             ),
                           )
-                        else ...[
-                          _ProductGrid(products: displayed),
-                          const SizedBox(height: 28),
-
-                          if (_loading)
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 32),
-                              child: Center(child: LoadingSpinner()),
-                            )
-                          else if (_hasMore)
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 32),
-                                child: GestureDetector(
-                                  onTap: _loadMore,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 22, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      borderRadius:
-                                          BorderRadius.circular(999),
-                                      border: Border.all(
-                                          color: AppColors.hairline,
-                                          width: 1),
-                                    ),
-                                    child: Text(
-                                      'Load more',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.inkSoft,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+                        else
+                          _PieceGrid(pieces: pieceService.pieces),
                       ],
                     ),
                   ),
@@ -702,12 +651,12 @@ class _StatColumn extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── Product grid ────────────────────────────────────────────
+// ── Piece grid ──────────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
-class _ProductGrid extends StatelessWidget {
-  final List<Product> products;
-  const _ProductGrid({required this.products});
+class _PieceGrid extends StatelessWidget {
+  final List<PieceListItem> pieces;
+  const _PieceGrid({required this.pieces});
 
   @override
   Widget build(BuildContext context) {
@@ -716,68 +665,203 @@ class _ProductGrid extends StatelessWidget {
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: products.length,
+        itemCount: pieces.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 14,
           mainAxisSpacing: 24,
           childAspectRatio: 0.58,
         ),
-        itemBuilder: (_, i) => _ProductCard(product: products[i]),
+        itemBuilder: (_, i) => _PieceCard(piece: pieces[i]),
       ),
     );
   }
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── Product card with swipeable images ──────────────────────
+// ── Piece card with action icons ────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
-class _ProductCard extends StatefulWidget {
-  final Product product;
-  const _ProductCard({required this.product});
+class _PieceCard extends StatelessWidget {
+  final PieceListItem piece;
+  const _PieceCard({required this.piece});
 
-  @override
-  State<_ProductCard> createState() => _ProductCardState();
-}
-
-class _ProductCardState extends State<_ProductCard> {
-  int _currentPage = 0;
-
-  void _openDetail() {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, _, _) =>
-            ProductDetailScreen(productId: widget.product.id),
-        transitionsBuilder: (_, animation, _, child) =>
-            FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 300),
+  void _confirmDelete(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: AppColors.ink.withValues(alpha: 0.3),
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.delete_outline_rounded,
+                    size: 20, color: AppColors.danger),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Delete piece',
+                style: GoogleFonts.fraunces(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.inkStrong,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This will permanently delete "${piece.title}". This action cannot be undone.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.muted,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border:
+                              Border.all(color: AppColors.hairline, width: 1),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.inkSoft,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        PieceService.instance.deletePiece(piece.id).then((_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '"${piece.title}" deleted',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.bone,
+                                ),
+                              ),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: AppColors.ink,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6)),
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                            ),
+                          );
+                        }).catchError((_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Failed to delete piece',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.bone,
+                                ),
+                              ),
+                              backgroundColor: AppColors.danger,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6)),
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                            ),
+                          );
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Delete',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.surface,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final images = widget.product.images;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Image area with PageView ──
+        // ── Image area ──
         Expanded(
-          child: GestureDetector(
-            onTap: _openDetail,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Stack(
-                children: [
-                  PageView.builder(
-                    itemCount: images.length,
-                    onPageChanged: (p) => setState(() => _currentPage = p),
-                    itemBuilder: (_, i) => Container(color: images[i]),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (piece.coverImageBytes != null)
+                  Image.memory(
+                    piece.coverImageBytes!,
+                    fit: BoxFit.cover,
+                  )
+                else
+                  Container(
+                    color: AppColors.hairline,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.image_outlined,
+                      size: 32,
+                      color: AppColors.muted,
+                    ),
                   ),
 
-                  // Tag badge
+                // Tag badge
+                if (piece.rental)
                   Positioned(
                     top: 8,
                     left: 8,
@@ -791,7 +875,7 @@ class _ProductCardState extends State<_ProductCard> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        widget.product.tag,
+                        'Rental',
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
@@ -801,117 +885,99 @@ class _ProductCardState extends State<_ProductCard> {
                       ),
                     ),
                   ),
-
-                  // Dot indicators
-                  if (images.length > 1)
-                    Positioned(
-                      bottom: 10,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(images.length, (i) {
-                          final active = i == _currentPage;
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: active ? 6 : 5,
-                            height: active ? 6 : 5,
-                            margin:
-                                const EdgeInsets.symmetric(horizontal: 3),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: active
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.45),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
           ),
         ),
 
         const SizedBox(height: 10),
 
-        // ── Product info + save icon ──
-        GestureDetector(
-          onTap: _openDetail,
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.product.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkStrong,
-                      ),
+        // ── Piece info + action icons ──
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    piece.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkStrong,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${widget.product.designer} · ${widget.product.year}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.muted,
-                      ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      if (piece.discipline != null) piece.discipline!,
+                      if (piece.year != null) piece.year!,
+                    ].join(' \u00B7 '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.muted,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.product.price,
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkSoft,
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    piece.priceFormatted,
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkSoft,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Action icons
+            Column(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, _, _) =>
+                            ListPieceScreen(editPieceId: piece.id),
+                        transitionsBuilder: (_, animation, _, child) =>
+                            FadeTransition(
+                                opacity: animation, child: child),
+                        transitionDuration:
+                            const Duration(milliseconds: 300),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.edit_outlined,
+                      size: 16,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ),
-              ),
-              ListenableBuilder(
-                listenable: CollectionService.instance,
-                builder: (context, _) {
-                  final saved = CollectionService.instance
-                      .isProductSaved(widget.product.id);
-                  return GestureDetector(
-                    onTap: () => CollectionService.instance
-                        .toggleSaved(widget.product.id),
-                    onLongPress: () => SaveToCollectionModal.show(
-                        context, widget.product.id),
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 4, top: 1),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (child, anim) =>
-                            ScaleTransition(scale: anim, child: child),
-                        child: Icon(
-                          saved
-                              ? Icons.bookmark_rounded
-                              : Icons.bookmark_border_rounded,
-                          key: ValueKey(saved),
-                          size: 18,
-                          color:
-                              saved ? AppColors.accent : AppColors.muted,
-                        ),
-                      ),
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () => _confirmDelete(context),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 16,
+                      color: AppColors.muted,
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     );
