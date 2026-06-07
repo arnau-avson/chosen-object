@@ -69,7 +69,12 @@ class BrowseService:
         offset: int = 0,
         limit: int = 20,
     ) -> list[BrowseUserOut]:
-        users = self.repo.search_users(search=search, offset=offset, limit=limit)
+        users = self.repo.search_users(
+            search=search,
+            exclude_user_id=current_user.id if current_user else None,
+            offset=offset,
+            limit=limit,
+        )
 
         results = []
         for user in users:

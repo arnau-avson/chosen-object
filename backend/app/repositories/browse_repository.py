@@ -66,10 +66,24 @@ class BrowseRepository:
     def search_users(
         self,
         search: str | None = None,
+        exclude_user_id: int | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[User]:
-        q = self.db.query(User).filter(User.is_active == True)
+        # Only show users that have at least one active piece (real studios)
+        users_with_pieces = (
+            self.db.query(Piece.user_id)
+            .filter(Piece.status == "active")
+            .distinct()
+            .subquery()
+        )
+        q = (
+            self.db.query(User)
+            .filter(User.is_active == True, User.id.in_(users_with_pieces))
+        )
+
+        if exclude_user_id is not None:
+            q = q.filter(User.id != exclude_user_id)
 
         if search:
             q = q.filter(
