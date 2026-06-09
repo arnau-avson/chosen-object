@@ -43,6 +43,8 @@ class _AppDrawerState extends State<AppDrawer>
     final msgCount = MessageService.instance.unreadCount;
     final notifCount = NotificationService.instance.unreadCount;
     final cartCount = CartService.instance.itemCount;
+    final role = ProfileService.instance.role.toLowerCase();
+    final isSeller = role == 'seller' || role == 'both';
 
     return [
       _Section('Discover', [
@@ -64,7 +66,7 @@ class _AppDrawerState extends State<AppDrawer>
         _Item('Payments',        Icons.credit_card_outlined,          '/payments'),
         _Item('Help',            Icons.help_outline_rounded,          '/help'),
       ]),
-      _Section('Sell', [
+      if (isSeller) _Section('Sell', [
         _Item('List a piece',    Icons.add_photo_alternate_outlined,  '/list'),
         _Item('Dashboard',       Icons.bar_chart_rounded,             '/dashboard'),
         _Item('Rental calendar', Icons.calendar_today_outlined,       '/rental-calendar'),
@@ -141,6 +143,7 @@ class _AppDrawerState extends State<AppDrawer>
                 MessageService.instance,
                 NotificationService.instance,
                 CartService.instance,
+                ProfileService.instance,
               ]),
               builder: (context, _) {
                 final sections = _buildSections();
