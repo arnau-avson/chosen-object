@@ -4,6 +4,24 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 const TOTAL_SECTIONS = 5 // 0=hero, 1=about, 2=howItWorks, 3=downloadCTA, 4=footer
 const currentIndex = ref(0)
 let isScrolling = false
+const heroVideo = ref<HTMLVideoElement | null>(null)
+
+// Loading state — wait for all videos
+const loading = ref(true)
+const loadingReady = ref(false)
+const videosLoaded = ref(0)
+const TOTAL_VIDEOS = 4 // 1.mp4, 2.mp4, 3.mp4, 4.mp4
+
+function onVideoReady() {
+  videosLoaded.value++
+  if (videosLoaded.value >= TOTAL_VIDEOS) {
+    // All videos ready — fade out loader
+    setTimeout(() => {
+      loadingReady.value = true
+      setTimeout(() => { loading.value = false }, 600)
+    }, 300)
+  }
+}
 
 // Login modal
 const showLogin = ref(false)
@@ -128,7 +146,7 @@ const dots = computed(() =>
 // Wheel
 function handleWheel(e: WheelEvent) {
   e.preventDefault()
-  if (isScrolling || showLogin.value) return
+  if (isScrolling || showLogin.value || loading.value) return
   if (Math.abs(e.deltaY) < 15) return
   goToSection(currentIndex.value + (e.deltaY > 0 ? 1 : -1))
 }
@@ -179,6 +197,11 @@ onMounted(() => {
   window.addEventListener('touchstart', handleTouchStart, { passive: true })
   window.addEventListener('touchend', handleTouchEnd, { passive: true })
   document.addEventListener('visibilitychange', handleVisibility)
+
+  // Force play hero video
+  if (heroVideo.value) {
+    heroVideo.value.play().catch(() => {})
+  }
 })
 
 onUnmounted(() => {
@@ -194,6 +217,24 @@ onUnmounted(() => {
 
 <template>
   <div class="landing-root">
+
+    <!-- ── Loading screen ── -->
+    <Teleport to="body">
+      <div
+        v-if="loading"
+        class="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-surface transition-opacity duration-500"
+        :style="{ opacity: loadingReady ? 0 : 1 }"
+      >
+        <img src="/logo.svg" alt="CO" class="w-16 h-16 rounded-xl mb-6 animate-pulse" />
+        <p class="font-serif text-xl text-ink-strong mb-8">Chosen Object</p>
+        <div class="w-40 h-0.5 bg-hairline rounded-full overflow-hidden">
+          <div
+            class="h-full bg-ink/40 rounded-full transition-all duration-500 ease-out"
+            :style="{ width: (videosLoaded / TOTAL_VIDEOS * 100) + '%' }"
+          ></div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- ── Navbar (always on top) ── -->
     <nav
@@ -239,13 +280,16 @@ onUnmounted(() => {
     <section :style="sectionStyle(0)" class="flex flex-col justify-center px-6 md:px-16 lg:px-24">
       <!-- Video background -->
       <video
+        ref="heroVideo"
         class="absolute inset-0 w-full h-full object-cover"
         src="/landing_videos/1.mp4"
         autoplay
         loop
         muted
         playsinline
+        preload="auto"
         disablePictureInPicture
+        @canplaythrough.once="onVideoReady"
       ></video>
 
       <div class="text-center md:text-left max-w-3xl relative z-10">
@@ -280,7 +324,9 @@ onUnmounted(() => {
         loop
         muted
         playsinline
+        preload="auto"
         disablePictureInPicture
+        @canplaythrough.once="onVideoReady"
       ></video>
       <!-- Dark overlay for readability -->
       <div class="absolute inset-0 bg-black/50"></div>
@@ -360,7 +406,9 @@ onUnmounted(() => {
         loop
         muted
         playsinline
+        preload="auto"
         disablePictureInPicture
+        @canplaythrough.once="onVideoReady"
       ></video>
       <div class="absolute inset-0 bg-black/60"></div>
 
@@ -443,7 +491,9 @@ onUnmounted(() => {
         loop
         muted
         playsinline
+        preload="auto"
         disablePictureInPicture
+        @canplaythrough.once="onVideoReady"
       ></video>
       <div class="absolute inset-0 bg-black/50"></div>
 
