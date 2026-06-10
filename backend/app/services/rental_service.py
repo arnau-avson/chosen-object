@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..models.user import User
 from ..repositories.rental_repository import RentalRepository
+from ..repositories.settings_repository import SettingsRepository
 from ..schemas.rental import (
     BlockedDateRange,
     RentalCalendarOut,
@@ -90,16 +91,19 @@ class RentalService:
             notes=data.notes,
         )
 
-        # Notify owner
-        notify(
-            self.db,
-            user_id=piece.user_id,
-            type="rental",
-            title="New rental request",
-            body=f"{user.username} wants to rent '{piece.title}'.",
-            reference_id=rental.id,
-            reference_type="rental",
-        )
+        # Notify owner (gated by rental_requests setting)
+        settings_repo = SettingsRepository(self.db)
+        owner_settings = settings_repo.get_by_user(piece.user_id)
+        if not owner_settings or owner_settings.rental_requests:
+            notify(
+                self.db,
+                user_id=piece.user_id,
+                type="rental",
+                title="New rental request",
+                body=f"{user.username} wants to rent '{piece.title}'.",
+                reference_id=rental.id,
+                reference_type="rental",
+            )
 
         return self._rental_to_out(rental)
 
@@ -155,16 +159,19 @@ class RentalService:
         new_status = "accepted" if data.accept else "declined"
         self.repo.update(rental, {"status": new_status})
 
-        # Notify renter
-        notify(
-            self.db,
-            user_id=rental.renter_id,
-            type="rental",
-            title=f"Rental {new_status}",
-            body=f"Your rental request was {new_status}.",
-            reference_id=rental.id,
-            reference_type="rental",
-        )
+        # Notify renter (gated by rental_status_changes setting)
+        settings_repo = SettingsRepository(self.db)
+        renter_settings = settings_repo.get_by_user(rental.renter_id)
+        if not renter_settings or renter_settings.rental_status_changes:
+            notify(
+                self.db,
+                user_id=rental.renter_id,
+                type="rental",
+                title=f"Rental {new_status}",
+                body=f"Your rental request was {new_status}.",
+                reference_id=rental.id,
+                reference_type="rental",
+            )
 
         return self._rental_to_out(rental)
 
@@ -192,6 +199,21 @@ class RentalService:
             )
 
         self.repo.update(rental, {"status": data.status})
+
+        # Notify renter of status change (gated by rental_status_changes setting)
+        settings_repo = SettingsRepository(self.db)
+        renter_settings = settings_repo.get_by_user(rental.renter_id)
+        if not renter_settings or renter_settings.rental_status_changes:
+            notify(
+                self.db,
+                user_id=rental.renter_id,
+                type="rental_status",
+                title=f"Rental {data.status}",
+                body=f"Your rental status has been updated to '{data.status}'.",
+                reference_id=rental.id,
+                reference_type="rental",
+            )
+
         return self._rental_to_out(rental)
 
     def get_calendar(self, piece_id: int, year: int, month: int) -> RentalCalendarOut:

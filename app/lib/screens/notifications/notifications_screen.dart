@@ -4,6 +4,7 @@ import '../../core/app_colors.dart';
 import '../../core/notification_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
+import 'notification_settings_sheet.dart';
 
 // ═════════════════════════════════════════════════════════════
 // ── Notifications Screen ────────────────────────────────────
@@ -123,6 +124,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   ),
                                 ),
                               ),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: () =>
+                                  NotificationSettingsSheet.show(context),
+                              child: const Icon(
+                                Icons.tune_rounded,
+                                size: 20,
+                                color: AppColors.muted,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -345,14 +356,22 @@ class _NotificationRowState extends State<_NotificationRow>
     switch (type) {
       case 'order_update':
         return Icons.local_shipping_outlined;
-      case 'new_follower':
+      case 'follow':
         return Icons.person_add_outlined;
       case 'price_drop':
         return Icons.trending_down_rounded;
-      case 'new_message':
+      case 'message':
         return Icons.chat_bubble_outline_rounded;
       case 'item_sold':
         return Icons.sell_outlined;
+      case 'new_piece':
+        return Icons.auto_awesome_outlined;
+      case 'piece_update':
+        return Icons.edit_outlined;
+      case 'rental':
+        return Icons.calendar_today_outlined;
+      case 'rental_status':
+        return Icons.update_rounded;
       default:
         return Icons.info_outline_rounded;
     }
@@ -362,14 +381,22 @@ class _NotificationRowState extends State<_NotificationRow>
     switch (type) {
       case 'order_update':
         return AppColors.sage;
-      case 'new_follower':
+      case 'follow':
         return AppColors.accent;
       case 'price_drop':
         return AppColors.gold;
-      case 'new_message':
+      case 'message':
         return AppColors.inkSoft;
       case 'item_sold':
         return AppColors.success;
+      case 'new_piece':
+        return AppColors.gold;
+      case 'piece_update':
+        return AppColors.sage;
+      case 'rental':
+        return AppColors.accent;
+      case 'rental_status':
+        return AppColors.sage;
       default:
         return AppColors.muted;
     }

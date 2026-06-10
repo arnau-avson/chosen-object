@@ -39,6 +39,21 @@ class UserSettings(Base):
     allow_messages_from_anyone: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    new_pieces: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    piece_updates: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    messages: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    rental_requests: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    rental_status_changes: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     language: Mapped[str] = mapped_column(
         String(20), nullable=False, default="en"
     )

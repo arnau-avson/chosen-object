@@ -1,12 +1,18 @@
 import io
+import logging
 
 from fastapi import HTTPException, UploadFile, status
 from PIL import Image
 from sqlalchemy.orm import Session
 
 from ..models.user import User
+from ..repositories.follow_repository import FollowRepository
 from ..repositories.piece_repository import PieceRepository
+from ..repositories.settings_repository import SettingsRepository
 from ..schemas.piece import PieceCreate, PieceListOut, PieceOut, PieceUpdate
+from .notification_helper import notify
+
+logger = logging.getLogger(__name__)
 
 _PIECE_IMAGE_SIZE = (1200, 1200)
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB upload limit per image
@@ -26,6 +32,7 @@ def _compress_piece_image(raw: bytes) -> bytes:
 
 class PieceService:
     def __init__(self, db: Session) -> None:
+        self.db = db
         self.repo = PieceRepository(db)
 
     def list_pieces(self, user: User) -> list[PieceListOut]:
@@ -43,6 +50,14 @@ class PieceService:
 
     def create_piece(self, user: User, data: PieceCreate) -> PieceOut:
         piece = self.repo.create(user.id, data.model_dump())
+        self._notify_followers(
+            user,
+            piece,
+            setting_key="new_pieces",
+            notif_type="new_piece",
+            title="New piece",
+            body=f"{user.username} listed a new piece: {piece.title}",
+        )
         return PieceOut.from_model(piece)
 
     async def upload_images(
@@ -92,6 +107,14 @@ class PieceService:
         if not updates:
             return PieceOut.from_model(piece)
         piece = self.repo.update(piece, updates)
+        self._notify_followers(
+            user,
+            piece,
+            setting_key="piece_updates",
+            notif_type="piece_update",
+            title="Piece updated",
+            body=f"{user.username} updated '{piece.title}'.",
+        )
         return PieceOut.from_model(piece)
 
     def delete_image(self, user: User, piece_id: int, image_id: int) -> PieceOut:
@@ -119,3 +142,33 @@ class PieceService:
                 detail="Piece not found.",
             )
         self.repo.delete(piece)
+
+    def _notify_followers(
+        self,
+        user: User,
+        piece,
+        setting_key: str,
+        notif_type: str,
+        title: str,
+        body: str,
+    ) -> None:
+        """Notify all followers of a user about a piece event."""
+        try:
+            follow_repo = FollowRepository(self.db)
+            settings_repo = SettingsRepository(self.db)
+            followers = follow_repo.get_followers(user.id, offset=0, limit=10000)
+            for follower_user, _ in followers:
+                user_settings = settings_repo.get_by_user(follower_user.id)
+                if user_settings and not getattr(user_settings, setting_key, True):
+                    continue
+                notify(
+                    self.db,
+                    user_id=follower_user.id,
+                    type=notif_type,
+                    title=title,
+                    body=body,
+                    reference_id=piece.id,
+                    reference_type="piece",
+                )
+        except Exception as e:
+            logger.error(f"Failed to notify followers: {e}")

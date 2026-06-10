@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..models.user import User
 from ..repositories.follow_repository import FollowRepository
+from ..repositories.settings_repository import SettingsRepository
 from ..schemas.follow import FollowCountsOut, FollowUserOut
 from .notification_helper import notify
 
@@ -34,15 +35,19 @@ class FollowService:
 
         self.repo.follow(current_user.id, target_user_id)
 
-        notify(
-            self.db,
-            user_id=target_user_id,
-            type="follow",
-            title="New follower",
-            body=f"{current_user.username} started following you.",
-            reference_id=current_user.id,
-            reference_type="user",
-        )
+        # Gate by new_followers setting
+        settings_repo = SettingsRepository(self.db)
+        target_settings = settings_repo.get_by_user(target_user_id)
+        if not target_settings or target_settings.new_followers:
+            notify(
+                self.db,
+                user_id=target_user_id,
+                type="follow",
+                title="New follower",
+                body=f"{current_user.username} started following you.",
+                reference_id=current_user.id,
+                reference_type="user",
+            )
 
         return {"following": True}
 

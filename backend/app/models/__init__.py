@@ -9,3 +9,4 @@ from .rental import Rental  # noqa: F401
 from .message import Conversation, ConversationParticipant, Message  # noqa: F401
 from .notification import Notification  # noqa: F401
 from .settings import UserSettings  # noqa: F401
+from .device_token import DeviceToken  # noqa: F401

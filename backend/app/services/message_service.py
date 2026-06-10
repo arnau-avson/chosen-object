@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..models.user import User
 from ..repositories.message_repository import MessageRepository
+from ..repositories.settings_repository import SettingsRepository
 from ..schemas.message import (
     ConversationOut,
     ConversationStartIn,
@@ -56,16 +57,19 @@ class MessageService:
 
         self.repo.commit()
 
-        # Notify the other user
-        notify(
-            self.db,
-            user_id=data.user_id,
-            type="message",
-            title="New message request",
-            body=f"{user.username} sent you a message.",
-            reference_id=conv.id,
-            reference_type="conversation",
-        )
+        # Notify the other user (gated by messages setting)
+        settings_repo = SettingsRepository(self.db)
+        other_settings = settings_repo.get_by_user(data.user_id)
+        if not other_settings or other_settings.messages:
+            notify(
+                self.db,
+                user_id=data.user_id,
+                type="message",
+                title="New message request",
+                body=f"{user.username} sent you a message.",
+                reference_id=conv.id,
+                reference_type="conversation",
+            )
 
         return self._build_conversation_out(conv, user)
 
@@ -121,18 +125,21 @@ class MessageService:
         self.repo.update_conversation_timestamp(conv)
         self.repo.commit()
 
-        # Notify other participant
+        # Notify other participant (gated by messages setting)
         other = self.repo.get_other_participant(conversation_id, user.id)
         if other:
-            notify(
-                self.db,
-                user_id=other.user_id,
-                type="message",
-                title="New message",
-                body=f"{user.username}: {data.text[:50]}",
-                reference_id=conversation_id,
-                reference_type="conversation",
-            )
+            settings_repo = SettingsRepository(self.db)
+            other_settings = settings_repo.get_by_user(other.user_id)
+            if not other_settings or other_settings.messages:
+                notify(
+                    self.db,
+                    user_id=other.user_id,
+                    type="message",
+                    title="New message",
+                    body=f"{user.username}: {data.text[:50]}",
+                    reference_id=conversation_id,
+                    reference_type="conversation",
+                )
 
         return self._message_to_out(msg)
 

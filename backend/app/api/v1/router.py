@@ -7,6 +7,7 @@ from .endpoints import (
     cart,
     collections,
     dashboard,
+    device_tokens,
     follows,
     messages,
     notifications,
@@ -33,3 +34,4 @@ router.include_router(rentals.router)
 router.include_router(messages.router)
 router.include_router(notifications.router)
 router.include_router(dashboard.router)
+router.include_router(device_tokens.router)

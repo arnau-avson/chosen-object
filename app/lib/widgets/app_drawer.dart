@@ -6,6 +6,7 @@ import '../core/cart_service.dart';
 import '../core/message_service.dart';
 import '../core/notification_service.dart';
 import '../core/profile_service.dart';
+import '../core/push_notification_service.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/map/map_screen.dart';
@@ -285,6 +286,7 @@ class _AppDrawerState extends State<AppDrawer>
           highlightColor: AppColors.ink.withValues(alpha: 0.04),
           onTap: () async {
             Navigator.of(context).pop();
+            await PushNotificationService.instance.unregisterToken();
             await AuthService.clearToken();
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(

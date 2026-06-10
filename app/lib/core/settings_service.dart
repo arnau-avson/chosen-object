@@ -26,12 +26,22 @@ class SettingsService extends ChangeNotifier {
   bool _orderUpdates = true;
   bool _priceDrops = false;
   bool _newFollowers = true;
+  bool _newPieces = true;
+  bool _pieceUpdates = true;
+  bool _messages = true;
+  bool _rentalRequests = true;
+  bool _rentalStatusChanges = true;
 
   bool get pushNotifications => _pushNotifications;
   bool get emailNotifications => _emailNotifications;
   bool get orderUpdates => _orderUpdates;
   bool get priceDrops => _priceDrops;
   bool get newFollowers => _newFollowers;
+  bool get newPieces => _newPieces;
+  bool get pieceUpdates => _pieceUpdates;
+  bool get messages => _messages;
+  bool get rentalRequests => _rentalRequests;
+  bool get rentalStatusChanges => _rentalStatusChanges;
 
   // ── Privacy ────────────────────────────────────────────────
   bool _showProfilePublicly = true;
@@ -60,6 +70,11 @@ class SettingsService extends ChangeNotifier {
       _orderUpdates = map['order_updates'] as bool? ?? true;
       _priceDrops = map['price_drops'] as bool? ?? false;
       _newFollowers = map['new_followers'] as bool? ?? true;
+      _newPieces = map['new_pieces'] as bool? ?? true;
+      _pieceUpdates = map['piece_updates'] as bool? ?? true;
+      _messages = map['messages'] as bool? ?? true;
+      _rentalRequests = map['rental_requests'] as bool? ?? true;
+      _rentalStatusChanges = map['rental_status_changes'] as bool? ?? true;
       _showProfilePublicly = map['show_profile_publicly'] as bool? ?? true;
       _allowMessagesFromAnyone =
           map['allow_messages_from_anyone'] as bool? ?? false;
@@ -109,6 +124,36 @@ class SettingsService extends ChangeNotifier {
     _newFollowers = v;
     notifyListeners();
     _updateSetting('new_followers', v);
+  }
+
+  void setNewPieces(bool v) {
+    _newPieces = v;
+    notifyListeners();
+    _updateSetting('new_pieces', v);
+  }
+
+  void setPieceUpdates(bool v) {
+    _pieceUpdates = v;
+    notifyListeners();
+    _updateSetting('piece_updates', v);
+  }
+
+  void setMessages(bool v) {
+    _messages = v;
+    notifyListeners();
+    _updateSetting('messages', v);
+  }
+
+  void setRentalRequests(bool v) {
+    _rentalRequests = v;
+    notifyListeners();
+    _updateSetting('rental_requests', v);
+  }
+
+  void setRentalStatusChanges(bool v) {
+    _rentalStatusChanges = v;
+    notifyListeners();
+    _updateSetting('rental_status_changes', v);
   }
 
   void setShowProfilePublicly(bool v) {

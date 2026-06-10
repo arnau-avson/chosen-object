@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     db_password: str = ""
     db_name: str = "chose-objet"
 
+    # ── Firebase ────────────────────────────────────────────
+    firebase_credentials_path: str = ""
+
     # ── JWT ──────────────────────────────────────────────────
     jwt_secret_key: str = "dev-secret-key"
     jwt_algorithm: str = "HS256"
