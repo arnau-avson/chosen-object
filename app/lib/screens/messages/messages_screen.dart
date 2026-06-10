@@ -47,6 +47,14 @@ class _MessagesScreenState extends State<MessagesScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    await Future.wait([
+      MessageService.instance.fetchConversations(),
+      MessageService.instance.fetchRequests(),
+    ]);
   }
 
   @override
