@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
@@ -52,7 +54,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (authenticated) {
       ProfileService.instance.loadFromBackend();
-      await PushNotificationService.instance.initialize();
+      if (Platform.isAndroid || Platform.isIOS) {
+        await PushNotificationService.instance.initialize();
+      }
     }
 
     // Authenticated → home. Not authenticated → login.

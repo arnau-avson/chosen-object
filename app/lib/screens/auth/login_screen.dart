@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -89,7 +91,9 @@ class _LoginScreenState extends State<LoginScreen>
         password: _passwordController.text,
       );
       ProfileService.instance.loadFromBackend();
-      await PushNotificationService.instance.initialize();
+      if (Platform.isAndroid || Platform.isIOS) {
+        await PushNotificationService.instance.initialize();
+      }
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
@@ -141,7 +145,9 @@ class _LoginScreenState extends State<LoginScreen>
         onVerified: () {
           Navigator.of(ctx).pop();
           ProfileService.instance.loadFromBackend();
-          PushNotificationService.instance.initialize();
+          if (Platform.isAndroid || Platform.isIOS) {
+            PushNotificationService.instance.initialize();
+          }
           if (!mounted) return;
           Navigator.of(context).pushAndRemoveUntil(
             PageRouteBuilder(
