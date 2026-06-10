@@ -225,7 +225,6 @@ onUnmounted(() => {
         class="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-surface transition-opacity duration-500"
         :style="{ opacity: loadingReady ? 0 : 1 }"
       >
-        <img src="/logo.svg" alt="CO" class="w-16 h-16 rounded-xl mb-6 animate-pulse" />
         <p class="font-serif text-xl text-ink-strong mb-8">Chosen Object</p>
         <div class="w-40 h-0.5 bg-hairline rounded-full overflow-hidden">
           <div
