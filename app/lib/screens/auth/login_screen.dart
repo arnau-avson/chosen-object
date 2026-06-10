@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/auth_service.dart';
 import '../../core/profile_service.dart';
+import '../../core/push_notification_service.dart';
 import '../home/home_screen.dart';
 import '../onboarding/onboarding_screen.dart';
 import 'forgot_password_screen.dart';
@@ -88,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen>
         password: _passwordController.text,
       );
       ProfileService.instance.loadFromBackend();
+      await PushNotificationService.instance.initialize();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
@@ -139,6 +141,7 @@ class _LoginScreenState extends State<LoginScreen>
         onVerified: () {
           Navigator.of(ctx).pop();
           ProfileService.instance.loadFromBackend();
+          PushNotificationService.instance.initialize();
           if (!mounted) return;
           Navigator.of(context).pushAndRemoveUntil(
             PageRouteBuilder(

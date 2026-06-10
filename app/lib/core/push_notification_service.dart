@@ -28,39 +28,47 @@ class PushNotificationService {
 
   /// Call once after Firebase.initializeApp() and after the user is authenticated.
   Future<void> initialize() async {
-    // Request permission (iOS will show a dialog, Android 13+ will too).
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    try {
+      debugPrint('[Push] Requesting permission...');
+      final settings = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      debugPrint('[Push] Permission status: ${settings.authorizationStatus}');
 
-    // Set up background handler.
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      // Set up background handler.
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // Set up local notifications for foreground display.
-    await _initLocalNotifications();
+      // Set up local notifications for foreground display.
+      await _initLocalNotifications();
 
-    // Listen to foreground messages.
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      // Listen to foreground messages.
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
-    // Handle notification taps when app is in background.
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      // Handle notification taps when app is in background.
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
-    // Check if the app was opened from a terminated state via notification.
-    final initial = await _messaging.getInitialMessage();
-    if (initial != null) {
-      _handleNotificationTap(initial);
+      // Check if the app was opened from a terminated state via notification.
+      final initial = await _messaging.getInitialMessage();
+      if (initial != null) {
+        _handleNotificationTap(initial);
+      }
+
+      // Register current token.
+      debugPrint('[Push] Getting FCM token...');
+      final token = await _messaging.getToken();
+      debugPrint('[Push] FCM token: ${token != null ? '${token.substring(0, 20)}...' : 'NULL'}');
+      if (token != null) {
+        await _registerToken(token);
+      }
+
+      // Listen for token refresh.
+      _messaging.onTokenRefresh.listen(_registerToken);
+    } catch (e, stack) {
+      debugPrint('[Push] Initialize failed: $e');
+      debugPrint('[Push] $stack');
     }
-
-    // Register current token.
-    final token = await _messaging.getToken();
-    if (token != null) {
-      await _registerToken(token);
-    }
-
-    // Listen for token refresh.
-    _messaging.onTokenRefresh.listen(_registerToken);
   }
 
   Future<void> _initLocalNotifications() async {
