@@ -25,6 +25,7 @@ def hash_pw(password: str) -> str:
 
 
 COMMON_PASSWORD = hash_pw("Test1234!")
+BAARRERO_PASSWORD = hash_pw("Arnau_2004")
 
 USERS = [
     {
@@ -539,7 +540,7 @@ def seed():
                 {
                     "username": u["username"],
                     "email": u["email"],
-                    "hashed_password": COMMON_PASSWORD,
+                    "hashed_password": BAARRERO_PASSWORD if u["username"] == "baarrero" else COMMON_PASSWORD,
                     "role": u["role"],
                     "first_name": u["first_name"],
                     "last_name": u["last_name"],
