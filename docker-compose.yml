@@ -29,6 +29,7 @@ services:
     volumes:
       - ~/chosen-object-data/mysql:/var/lib/mysql
       - ~/chosen-object-data/secrets.env:/run/secrets.env:ro
+      - ~/chosen-object-data/firebase-credentials.json:/run/firebase-credentials.json:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8002/health"]
       interval: 30s
