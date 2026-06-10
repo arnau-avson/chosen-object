@@ -58,7 +58,7 @@ class _MessagesScreenState extends State<MessagesScreen>
   void _openConversation(Conversation conv) {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => _ConversationScreen(
+        pageBuilder: (_, _, _) => ConversationScreen(
           conversationId: conv.id,
           participantName: conv.otherUsername ?? 'Unknown',
           otherUserId: conv.otherUserId,
@@ -708,21 +708,22 @@ bool _isDifferentDay(DateTime a, DateTime b) =>
 // ── Conversation Screen ─────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
-class _ConversationScreen extends StatefulWidget {
+class ConversationScreen extends StatefulWidget {
   final int conversationId;
   final String participantName;
   final int otherUserId;
-  const _ConversationScreen({
+  const ConversationScreen({
+    super.key,
     required this.conversationId,
     required this.participantName,
     required this.otherUserId,
   });
 
   @override
-  State<_ConversationScreen> createState() => _ConversationScreenState();
+  State<ConversationScreen> createState() => ConversationScreenState();
 }
 
-class _ConversationScreenState extends State<_ConversationScreen>
+class ConversationScreenState extends State<ConversationScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
   final _textController = TextEditingController();

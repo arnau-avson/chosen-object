@@ -6,8 +6,10 @@ import '../../core/app_colors.dart';
 import '../../core/browse_service.dart';
 import '../../core/follow_service.dart';
 import '../../core/collection_service.dart';
+import '../../core/message_service.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/save_to_collection_modal.dart';
+import '../messages/messages_screen.dart';
 import '../product_detail/product_detail_screen.dart';
 import 'followers_screen.dart';
 
@@ -105,6 +107,23 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _openMessage(BrowseUser profile) async {
+    final conv = await MessageService.instance.startConversation(_userId);
+    if (!mounted || conv == null) return;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => ConversationScreen(
+          conversationId: conv.id,
+          participantName: profile.studioName ?? profile.username,
+          otherUserId: _userId,
+        ),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   void _openFollowers(int tab) {
@@ -343,21 +362,24 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                               ),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 11),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                        color: AppColors.hairline, width: 1),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    'Message',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.inkSoft,
+                                child: GestureDetector(
+                                  onTap: () => _openMessage(profile),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 11),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                          color: AppColors.hairline, width: 1),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Message',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.inkSoft,
+                                      ),
                                     ),
                                   ),
                                 ),
