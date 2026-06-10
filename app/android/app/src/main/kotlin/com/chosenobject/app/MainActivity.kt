@@ -1,4 +1,4 @@
-package com.example.chosen_object
+package com.chosenobject.app
 
 import io.flutter.embedding.android.FlutterActivity
 
