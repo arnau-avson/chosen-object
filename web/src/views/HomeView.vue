@@ -158,6 +158,19 @@ function handleTouchEnd(e: TouchEvent) {
   goToSection(currentIndex.value + (dy > 0 ? 1 : -1))
 }
 
+// Resume videos when tab becomes visible again
+function handleVisibility() {
+  if (document.visibilityState === 'visible') {
+    document.querySelectorAll('.landing-root video').forEach((v) => {
+      const video = v as HTMLVideoElement
+      if (video.paused) {
+        video.currentTime = video.currentTime
+        video.play().catch(() => {})
+      }
+    })
+  }
+}
+
 onMounted(() => {
   document.body.style.overflow = 'hidden'
   document.documentElement.style.overflow = 'hidden'
@@ -165,6 +178,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('touchstart', handleTouchStart, { passive: true })
   window.addEventListener('touchend', handleTouchEnd, { passive: true })
+  document.addEventListener('visibilitychange', handleVisibility)
 })
 
 onUnmounted(() => {
@@ -174,6 +188,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('touchstart', handleTouchStart)
   window.removeEventListener('touchend', handleTouchEnd)
+  document.removeEventListener('visibilitychange', handleVisibility)
 })
 </script>
 
