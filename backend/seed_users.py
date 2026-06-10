@@ -213,6 +213,20 @@ USERS = [
         "avatar_color": "#4A5A3E",
         "banner_color": "#6A7A5E",
     },
+    {
+        "username": "baarrero",
+        "email": "baarrero@test.com",
+        "first_name": "Arnau",
+        "last_name": "Barrero",
+        "role": "both",
+        "city": "Barcelona",
+        "country": "Spain",
+        "studio_name": None,
+        "discipline": None,
+        "bio": "Founder and developer of Chosen Object. Passionate about connecting artisans with collectors worldwide.",
+        "avatar_color": "#2E2520",
+        "banner_color": "#4A3F35",
+    },
 ]
 
 # Pairs of (follower_username, following_username)
@@ -253,6 +267,11 @@ FOLLOWS = [
     ("carla_pujol", "elena_marti"),
     ("guillem_roca", "elena_marti"),
     ("guillem_roca", "marc_esteve"),
+    ("baarrero", "elena_marti"),
+    ("baarrero", "jordi_canudas"),
+    ("baarrero", "laia_font"),
+    ("baarrero", "anna_riera"),
+    ("baarrero", "marc_esteve"),
 ]
 
 # Sample pieces for sellers

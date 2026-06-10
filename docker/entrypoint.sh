@@ -58,6 +58,16 @@ echo "[backend] Running migrations..."
 cd /app/backend
 alembic upgrade head
 
+# ── Seed data (solo si la BD está vacía) ───────────────────
+USER_COUNT=$(mysql -u root -N -e "SELECT COUNT(*) FROM \`${DB_NAME}\`.users;" 2>/dev/null || echo "0")
+if [ "$USER_COUNT" = "0" ]; then
+    echo "[backend] Seeding database..."
+    cd /app/backend
+    python seed_users.py
+else
+    echo "[backend] Database already has ${USER_COUNT} users, skipping seed"
+fi
+
 # ── Lanzar backend (FastAPI) ─────────────────────────────────
 echo "[backend] Starting FastAPI on port ${APP_PORT}..."
 cd /app/backend
