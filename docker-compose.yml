@@ -1,8 +1,15 @@
 services:
-  web:
-    build: ./web
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ChosenObj2026!
+      MYSQL_DATABASE: chosen_object
+      MYSQL_USER: chosen
+      MYSQL_PASSWORD: ChosenObj2026!
+    volumes:
+      - db_data:/var/lib/mysql
     ports:
-      - "3001:3001"
+      - "3008:3306"
     restart: unless-stopped
 
   backend:
@@ -11,7 +18,15 @@ services:
       - "8002:8002"
     env_file:
       - ./backend/.env
-    environment:
-      - APP_ENV=production
-      - APP_PORT=8002
+    depends_on:
+      - db
     restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+volumes:
+  db_data:
