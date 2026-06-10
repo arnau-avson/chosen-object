@@ -6,22 +6,22 @@ const currentIndex = ref(0)
 let isScrolling = false
 const heroVideo = ref<HTMLVideoElement | null>(null)
 
-// Loading state — wait for all videos
+// Loading state — only wait for hero video (or timeout)
 const loading = ref(true)
 const loadingReady = ref(false)
-const videosLoaded = ref(0)
-const TOTAL_VIDEOS = 4 // 1.mp4, 2.mp4, 3.mp4, 4.mp4
 
-function onVideoReady() {
-  videosLoaded.value++
-  if (videosLoaded.value >= TOTAL_VIDEOS) {
-    // All videos ready — fade out loader
-    setTimeout(() => {
-      loadingReady.value = true
-      setTimeout(() => { loading.value = false }, 600)
-    }, 300)
-  }
+function dismissLoader() {
+  if (loadingReady.value) return
+  loadingReady.value = true
+  setTimeout(() => { loading.value = false }, 500)
 }
+
+function onHeroReady() {
+  dismissLoader()
+}
+
+// Fallback: dismiss after 3s even if video isn't ready
+setTimeout(() => { dismissLoader() }, 3000)
 
 // Login modal
 const showLogin = ref(false)
@@ -227,24 +227,21 @@ onUnmounted(() => {
       >
         <p class="font-serif text-xl text-ink-strong mb-8">Chosen Object</p>
         <div class="w-40 h-0.5 bg-hairline rounded-full overflow-hidden">
-          <div
-            class="h-full bg-ink/40 rounded-full transition-all duration-500 ease-out"
-            :style="{ width: (videosLoaded / TOTAL_VIDEOS * 100) + '%' }"
-          ></div>
+          <div class="h-full bg-ink/40 rounded-full animate-loading-bar"></div>
         </div>
       </div>
     </Teleport>
 
     <!-- ── Navbar (always on top) ── -->
     <nav
-      class="fixed top-6 left-8 right-8 z-50 transition-all duration-500"
+      class="fixed top-4 sm:top-6 left-4 sm:left-8 right-4 sm:right-8 z-50 transition-all duration-500"
       :style="{ opacity: currentIndex === TOTAL_SECTIONS - 1 ? 0 : 1, pointerEvents: currentIndex === TOTAL_SECTIONS - 1 ? 'none' : 'auto' }"
     >
       <div class="flex items-center justify-between">
         <div class="flex items-center">
-          <img src="/logo.svg" alt="CO" class="w-12 h-12 rounded-lg" />
+          <img src="/logo.svg" alt="CO" class="w-9 sm:w-12 h-9 sm:h-12 rounded-lg" />
           <span
-            class="ml-4 font-serif text-2xl tracking-tight transition-colors duration-500"
+            class="ml-2 sm:ml-4 font-serif text-lg sm:text-2xl tracking-tight transition-colors duration-500"
             :class="currentIndex === 0 ? 'text-ink-strong' : 'text-white'"
           >Chosen Object</span>
         </div>
@@ -259,7 +256,7 @@ onUnmounted(() => {
     </nav>
 
     <!-- ── Dot navigation ── -->
-    <div class="fixed right-8 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-5">
+    <div class="hidden sm:flex fixed right-8 top-1/2 -translate-y-1/2 z-50 flex-col gap-5">
       <button
         v-for="(active, i) in dots"
         :key="i"
@@ -288,7 +285,7 @@ onUnmounted(() => {
         playsinline
         preload="auto"
         disablePictureInPicture
-        @canplaythrough.once="onVideoReady"
+        @canplaythrough.once="onHeroReady"
       ></video>
 
       <div class="text-center md:text-left max-w-3xl relative z-10">
@@ -323,9 +320,8 @@ onUnmounted(() => {
         loop
         muted
         playsinline
-        preload="auto"
+        preload="none"
         disablePictureInPicture
-        @canplaythrough.once="onVideoReady"
       ></video>
       <!-- Dark overlay for readability -->
       <div class="absolute inset-0 bg-black/50"></div>
@@ -372,22 +368,22 @@ onUnmounted(() => {
       </div>
 
       <!-- Stats strip — bottom -->
-      <div class="absolute bottom-14 left-0 right-0 flex justify-center gap-12 md:gap-20 px-6">
+      <div class="absolute bottom-10 sm:bottom-14 left-0 right-0 grid grid-cols-4 gap-4 sm:gap-8 md:gap-20 px-6 sm:px-12 max-w-3xl mx-auto">
         <div class="text-center" :style="s1Style(4, 30)">
-          <p class="font-serif text-3xl md:text-4xl text-white">100+</p>
-          <p class="text-white/40 text-[11px] tracking-widest uppercase mt-1">Studios</p>
+          <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">100+</p>
+          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Studios</p>
         </div>
         <div class="text-center" :style="s1Style(5, 30)">
-          <p class="font-serif text-3xl md:text-4xl text-white">500+</p>
-          <p class="text-white/40 text-[11px] tracking-widest uppercase mt-1">Pieces</p>
+          <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">500+</p>
+          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Pieces</p>
         </div>
         <div class="text-center" :style="s1Style(6, 30)">
-          <p class="font-serif text-3xl md:text-4xl text-white">12</p>
-          <p class="text-white/40 text-[11px] tracking-widest uppercase mt-1">Disciplines</p>
+          <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">12</p>
+          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Disciplines</p>
         </div>
         <div class="text-center" :style="s1Style(7, 30)">
-          <p class="font-serif text-3xl md:text-4xl text-white">EU</p>
-          <p class="text-white/40 text-[11px] tracking-widest uppercase mt-1">Shipping</p>
+          <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">EU</p>
+          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Shipping</p>
         </div>
       </div>
     </section>
@@ -405,29 +401,28 @@ onUnmounted(() => {
         loop
         muted
         playsinline
-        preload="auto"
+        preload="none"
         disablePictureInPicture
-        @canplaythrough.once="onVideoReady"
       ></video>
       <div class="absolute inset-0 bg-black/60"></div>
 
       <!-- Content — full height, two-column layout -->
-      <div class="relative z-10 h-full flex items-center px-8 md:px-16 lg:px-24">
-        <div class="w-full grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] gap-10 lg:gap-16 items-center">
+      <div class="relative z-10 h-full flex items-center px-6 sm:px-8 md:px-16 lg:px-24 overflow-y-auto">
+        <div class="w-full grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] gap-8 lg:gap-16 items-center py-20 sm:py-0">
 
           <!-- Left — large typographic headline -->
-          <div>
-            <p class="font-serif italic text-gold/80 text-sm tracking-[0.3em] uppercase mb-5" :style="s2Style(0)">
+          <div class="text-center lg:text-left">
+            <p class="font-serif italic text-gold/80 text-sm tracking-[0.3em] uppercase mb-4 sm:mb-5" :style="s2Style(0)">
               How it works
             </p>
             <h2
-              class="font-serif text-4xl sm:text-5xl md:text-6xl text-white leading-[1.05] mb-8"
+              class="font-serif text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white leading-[1.05] mb-6 sm:mb-8"
               :style="s2Style(1, 60)"
             >
               Three steps.<br>
               <span class="italic text-white/50">One journey.</span>
             </h2>
-            <p class="text-white/50 text-base leading-relaxed max-w-md" :style="s2Style(2, 40)">
+            <p class="text-white/50 text-sm sm:text-base leading-relaxed max-w-md mx-auto lg:mx-0" :style="s2Style(2, 40)">
               From discovery to acquisition, every interaction is designed around the relationship between maker and collector.
             </p>
           </div>
@@ -436,7 +431,7 @@ onUnmounted(() => {
           <div class="hidden lg:block h-80 bg-white/10"></div>
 
           <!-- Right — steps with staggered entrance -->
-          <div class="flex flex-col gap-10">
+          <div class="flex flex-col gap-6 sm:gap-10">
             <!-- Step 1 -->
             <div class="flex items-start gap-6" :style="s2Style(3, 40)">
               <div class="shrink-0 w-14 h-14 rounded-full border border-white/20 flex items-center justify-center">
@@ -490,9 +485,8 @@ onUnmounted(() => {
         loop
         muted
         playsinline
-        preload="auto"
+        preload="none"
         disablePictureInPicture
-        @canplaythrough.once="onVideoReady"
       ></video>
       <div class="absolute inset-0 bg-black/50"></div>
 
@@ -530,9 +524,9 @@ onUnmounted(() => {
     <!-- ═══════════════════════════════════════════════════ -->
     <!-- Section 5 — Footer                                 -->
     <!-- ═══════════════════════════════════════════════════ -->
-    <section :style="sectionStyle(4)" class="bg-surface flex flex-col justify-between px-6 sm:px-12 py-12">
+    <section :style="sectionStyle(4)" class="bg-surface flex flex-col justify-between px-4 sm:px-12 py-8 sm:py-12 overflow-y-auto">
       <!-- Large title -->
-      <h2 class="font-serif text-[14vw] text-ink-strong text-center leading-none">
+      <h2 class="font-serif text-[13vw] sm:text-[14vw] text-ink-strong text-center leading-none mb-8 sm:mb-0">
         Chosen Object
       </h2>
 
@@ -759,5 +753,17 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   background: var(--color-bone);
+}
+
+@keyframes loading-bar {
+  0% { width: 0%; }
+  30% { width: 40%; }
+  60% { width: 70%; }
+  90% { width: 85%; }
+  100% { width: 95%; }
+}
+
+.animate-loading-bar {
+  animation: loading-bar 3s ease-out forwards;
 }
 </style>
