@@ -86,3 +86,20 @@ def get_user_profile(
     db: Annotated[Session, Depends(get_db)],
 ) -> BrowseUserOut:
     return BrowseService(db).get_user_profile(user_id, current_user)
+
+
+@router.get(
+    "/users/{user_id}/pieces",
+    response_model=list[BrowsePieceOut],
+    summary="Get pieces by user (public)",
+)
+def get_user_pieces(
+    user_id: int,
+    current_user: Annotated[User | None, Depends(get_optional_user)],
+    db: Annotated[Session, Depends(get_db)],
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[BrowsePieceOut]:
+    return BrowseService(db).get_user_pieces(
+        user_id, current_user, offset=offset, limit=limit
+    )

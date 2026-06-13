@@ -97,6 +97,25 @@ class BrowseService:
             )
         return results
 
+    def get_user_pieces(
+        self,
+        user_id: int,
+        current_user: User | None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[BrowsePieceOut]:
+        pieces = self.repo.get_user_pieces(user_id, offset=offset, limit=limit)
+        results = []
+        for piece in pieces:
+            is_saved = False
+            if current_user:
+                is_saved = self.repo.is_saved(current_user.id, piece.id)
+            seller = self.repo.get_user_by_id(piece.user_id)
+            results.append(
+                BrowsePieceOut.from_model(piece, seller=seller, is_saved=is_saved)
+            )
+        return results
+
     def get_user_profile(
         self, user_id: int, current_user: User | None
     ) -> BrowseUserOut:

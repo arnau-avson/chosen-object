@@ -238,4 +238,16 @@ class BrowseService extends ChangeNotifier {
       return null;
     }
   }
+
+  /// Get pieces by a specific user.
+  Future<List<BrowsePiece>> fetchUserPieces(int userId, {int offset = 0, int limit = 20}) async {
+    try {
+      final data = await ApiClient.instance.get('/browse/users/$userId/pieces?offset=$offset&limit=$limit');
+      return (data as List)
+          .map((j) => BrowsePiece.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
 }

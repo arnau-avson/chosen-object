@@ -7,6 +7,7 @@ import '../../core/browse_service.dart';
 import '../../core/follow_service.dart';
 import '../../core/collection_service.dart';
 import '../../core/message_service.dart';
+import '../../widgets/fullscreen_image_viewer.dart';
 import '../../widgets/loading_spinner.dart';
 import '../../widgets/save_to_collection_modal.dart';
 import '../messages/messages_screen.dart';
@@ -87,18 +88,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       _loadingProfile = false;
     });
     _ctrl.forward();
-    // Also fetch pieces by this user (search by username)
     if (profile != null) {
-      await BrowseService.instance.fetchPieces(
-        search: profile.username,
-        limit: 20,
-      );
+      final userPieces = await BrowseService.instance.fetchUserPieces(_userId);
       if (!mounted) return;
-      // Filter pieces that belong to this user
       setState(() {
-        _pieces = BrowseService.instance.pieces
-            .where((p) => p.userId == _userId)
-            .toList();
+        _pieces = userPieces;
       });
     }
   }
@@ -217,11 +211,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 right: 0,
                                 height: 140,
                                 child: profile.bannerImageB64 != null
-                                    ? Image.memory(
-                                        base64Decode(profile.bannerImageB64!),
-                                        fit: BoxFit.cover,
-                                        width: double.infinity,
-                                        height: 140,
+                                    ? GestureDetector(
+                                        onTap: () => FullscreenImageViewer.open(
+                                            context, [profile.bannerImageB64!]),
+                                        child: Image.memory(
+                                          base64Decode(profile.bannerImageB64!),
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                          height: 140,
+                                        ),
                                       )
                                     : Container(
                                         color: _parseHex(profile.bannerColor)),
@@ -241,13 +239,19 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                   ),
                                   alignment: Alignment.center,
                                   child: profile.avatarImageB64 != null
-                                      ? ClipOval(
-                                          child: Image.memory(
-                                            base64Decode(
-                                                profile.avatarImageB64!),
-                                            fit: BoxFit.cover,
-                                            width: 80,
-                                            height: 80,
+                                      ? GestureDetector(
+                                          onTap: () =>
+                                              FullscreenImageViewer.open(
+                                                  context,
+                                                  [profile.avatarImageB64!]),
+                                          child: ClipOval(
+                                            child: Image.memory(
+                                              base64Decode(
+                                                  profile.avatarImageB64!),
+                                              fit: BoxFit.cover,
+                                              width: 80,
+                                              height: 80,
+                                            ),
                                           ),
                                         )
                                       : Text(
