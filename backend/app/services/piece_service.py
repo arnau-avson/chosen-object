@@ -134,6 +134,16 @@ class PieceService:
         piece = self.repo.get_by_id(piece_id, user.id)
         return PieceOut.from_model(piece)
 
+    def toggle_hidden(self, user: User, piece_id: int) -> PieceOut:
+        piece = self.repo.get_by_id(piece_id, user.id)
+        if piece is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Piece not found.",
+            )
+        piece = self.repo.update(piece, {"is_hidden": not piece.is_hidden})
+        return PieceOut.from_model(piece)
+
     def delete_piece(self, user: User, piece_id: int) -> None:
         piece = self.repo.get_by_id(piece_id, user.id)
         if piece is None:

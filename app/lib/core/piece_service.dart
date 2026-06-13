@@ -66,6 +66,29 @@ class PieceService extends ChangeNotifier {
     );
   }
 
+  /// Toggle piece hidden/visible.
+  Future<void> toggleHidden(int pieceId) async {
+    await ApiClient.instance.patch('/pieces/$pieceId/toggle-hidden', {});
+    // Update local list
+    final idx = _pieces.indexWhere((p) => p.id == pieceId);
+    if (idx != -1) {
+      final old = _pieces[idx];
+      _pieces[idx] = PieceListItem(
+        id: old.id,
+        title: old.title,
+        discipline: old.discipline,
+        year: old.year,
+        priceCents: old.priceCents,
+        rental: old.rental,
+        isHidden: !old.isHidden,
+        status: old.status,
+        coverImageBytes: old.coverImageBytes,
+        createdAt: old.createdAt,
+      );
+    }
+    notifyListeners();
+  }
+
   /// Delete a piece by ID.
   Future<void> deletePiece(int pieceId) async {
     await ApiClient.instance.delete('/pieces/$pieceId');
@@ -80,6 +103,7 @@ class PieceService extends ChangeNotifier {
     String? discipline,
     String? year,
     String? edition,
+    String? description,
     required int priceCents,
     int? oldPriceCents,
     int? costPriceCents,
@@ -103,6 +127,7 @@ class PieceService extends ChangeNotifier {
       if (discipline != null) body['discipline'] = discipline;
       if (year != null && year.isNotEmpty) body['year'] = year;
       if (edition != null && edition.isNotEmpty) body['edition'] = edition;
+      if (description != null && description.isNotEmpty) body['description'] = description;
       if (oldPriceCents != null) body['old_price_cents'] = oldPriceCents;
       if (costPriceCents != null) body['cost_price_cents'] = costPriceCents;
       if (shipsTo != null && shipsTo.isNotEmpty) body['ships_to'] = shipsTo;

@@ -59,6 +59,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
   String? _discipline;
   final _yearCtrl = TextEditingController(text: '2025');
   final _editionCtrl = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
 
   // Step 3 — Pricing
   final _priceCtrl = TextEditingController();
@@ -109,6 +110,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
       _discipline = piece.discipline;
       _yearCtrl.text = piece.year ?? '';
       _editionCtrl.text = piece.edition ?? '';
+      _descriptionCtrl.text = piece.description ?? '';
       _priceCtrl.text = (piece.priceCents ~/ 100).toString();
       if (piece.oldPriceCents != null) {
         _oldPriceCtrl.text = (piece.oldPriceCents! ~/ 100).toString();
@@ -243,6 +245,9 @@ class _ListPieceScreenState extends State<ListPieceScreen>
           edition: _editionCtrl.text.trim().isNotEmpty
               ? _editionCtrl.text.trim()
               : null,
+          description: _descriptionCtrl.text.trim().isNotEmpty
+              ? _descriptionCtrl.text.trim()
+              : null,
           priceCents: price * 100,
           oldPriceCents: oldPrice != null ? oldPrice * 100 : null,
           costPriceCents: costPrice != null ? costPrice * 100 : null,
@@ -303,6 +308,7 @@ class _ListPieceScreenState extends State<ListPieceScreen>
             toolbarTitle: 'Crop photo',
             toolbarColor: const Color(0xFF2E2520),
             toolbarWidgetColor: Colors.white,
+            statusBarLight: true,
             activeControlsWidgetColor: AppColors.accent,
             lockAspectRatio: false,
           ),
@@ -920,6 +926,13 @@ class _ListPieceScreenState extends State<ListPieceScreen>
             controller: _editionCtrl,
             hint: 'e.g. 3 / 12',
           ),
+          const SizedBox(height: 20),
+          _FormField(
+            label: 'Description (optional)',
+            controller: _descriptionCtrl,
+            hint: 'Describe your piece — materials, dimensions, inspiration...',
+            maxLines: 5,
+          ),
         ],
       ),
     );
@@ -1181,12 +1194,14 @@ class _FormField extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType keyboardType;
   final String? hint;
+  final int maxLines;
 
   const _FormField({
     required this.label,
     required this.controller,
     this.keyboardType = TextInputType.text,
     this.hint,
+    this.maxLines = 1,
   });
 
   @override
@@ -1205,7 +1220,8 @@ class _FormField extends StatelessWidget {
         const SizedBox(height: 6),
         TextField(
           controller: controller,
-          keyboardType: keyboardType,
+          keyboardType: maxLines > 1 ? TextInputType.multiline : keyboardType,
+          maxLines: maxLines,
           style: GoogleFonts.inter(
             fontSize: 14,
             fontWeight: FontWeight.w400,

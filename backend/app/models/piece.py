@@ -41,6 +41,9 @@ class Piece(Base):
     rental_daily_rate_cents: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="active"
     )

@@ -53,6 +53,7 @@ class PieceUpdate(BaseModel):
     stock: int | None = None
     ships_to: list[str] | None = None
     packaging: str | None = None
+    is_hidden: bool | None = None
 
 
 class PieceOut(BaseModel):
@@ -71,6 +72,7 @@ class PieceOut(BaseModel):
     stock: int
     ships_to: list[str] | None = None
     packaging: str | None = None
+    is_hidden: bool = False
     status: str
     images: list[PieceImageOut] = []
     created_at: datetime
@@ -100,6 +102,7 @@ class PieceOut(BaseModel):
             stock=piece.stock,
             ships_to=ships_to_list,
             packaging=piece.packaging,
+            is_hidden=piece.is_hidden,
             status=piece.status,
             images=[PieceImageOut.from_model(img) for img in piece.images],
             created_at=piece.created_at,
@@ -116,6 +119,7 @@ class PieceListOut(BaseModel):
     year: str | None = None
     price_cents: int
     rental: bool
+    is_hidden: bool = False
     status: str
     cover_image_b64: str | None = None
     created_at: datetime
@@ -134,6 +138,7 @@ class PieceListOut(BaseModel):
             year=piece.year,
             price_cents=piece.price_cents,
             rental=piece.rental,
+            is_hidden=piece.is_hidden,
             status=piece.status,
             cover_image_b64=cover_b64,
             created_at=piece.created_at,

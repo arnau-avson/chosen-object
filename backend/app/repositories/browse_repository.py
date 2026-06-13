@@ -25,7 +25,7 @@ class BrowseRepository:
         q = (
             self.db.query(Piece)
             .options(joinedload(Piece.images))
-            .filter(Piece.status == "active", Piece.stock > 0)
+            .filter(Piece.status == "active", Piece.stock > 0, Piece.is_hidden == False)
         )
 
         if search:
@@ -56,7 +56,7 @@ class BrowseRepository:
         return (
             self.db.query(Piece)
             .options(joinedload(Piece.images))
-            .filter(Piece.id == piece_id, Piece.status == "active")
+            .filter(Piece.id == piece_id, Piece.status == "active", Piece.is_hidden == False)
             .first()
         )
 
@@ -121,7 +121,7 @@ class BrowseRepository:
     def get_pieces_count(self, user_id: int) -> int:
         return (
             self.db.query(func.count(Piece.id))
-            .filter(Piece.user_id == user_id, Piece.status == "active")
+            .filter(Piece.user_id == user_id, Piece.status == "active", Piece.is_hidden == False)
             .scalar()
             or 0
         )
@@ -132,7 +132,7 @@ class BrowseRepository:
         return (
             self.db.query(Piece)
             .options(joinedload(Piece.images))
-            .filter(Piece.user_id == user_id, Piece.status == "active")
+            .filter(Piece.user_id == user_id, Piece.status == "active", Piece.is_hidden == False)
             .order_by(Piece.created_at.desc())
             .offset(offset)
             .limit(limit)

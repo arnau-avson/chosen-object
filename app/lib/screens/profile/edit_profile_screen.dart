@@ -311,6 +311,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             toolbarTitle: ratioX == ratioY ? 'Crop avatar' : 'Crop banner',
             toolbarColor: const Color(0xFF2E2520),
             toolbarWidgetColor: Colors.white,
+            statusBarLight: true,
             activeControlsWidgetColor: AppColors.accent,
             lockAspectRatio: true,
           ),

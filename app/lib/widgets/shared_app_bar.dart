@@ -53,6 +53,7 @@ class _SharedAppBarState extends State<SharedAppBar>
     // Fetch badge counts
     NotificationService.instance.fetchUnreadCount();
     MessageService.instance.fetchUnreadCount();
+    MessageService.instance.fetchRequests();
     CartService.instance.fetchCart();
   }
 
@@ -133,6 +134,7 @@ class _SharedAppBarState extends State<SharedAppBar>
               ]),
               builder: (context, _) {
                 final total = MessageService.instance.unreadCount +
+                    MessageService.instance.requestCount +
                     NotificationService.instance.unreadCount +
                     CartService.instance.itemCount;
                 return IconButton(
@@ -307,8 +309,71 @@ class _SharedAppBarState extends State<SharedAppBar>
 
 // ── Notifications modal ──────────────────────────────────────
 
-class _NotificationsModal extends StatelessWidget {
+class _NotificationsModal extends StatefulWidget {
   const _NotificationsModal();
+
+  @override
+  State<_NotificationsModal> createState() => _NotificationsModalState();
+}
+
+class _NotificationsModalState extends State<_NotificationsModal> {
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    await NotificationService.instance.fetchNotifications();
+    if (mounted) setState(() => _loading = false);
+  }
+
+  String _formatDate(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'Now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${dt.day} ${months[dt.month - 1]}';
+  }
+
+  IconData _typeIcon(String type) {
+    switch (type) {
+      case 'order_update': return Icons.local_shipping_outlined;
+      case 'follow': return Icons.person_add_outlined;
+      case 'price_drop': return Icons.trending_down_rounded;
+      case 'message': return Icons.chat_bubble_outline_rounded;
+      case 'item_sold': return Icons.sell_outlined;
+      case 'new_piece': return Icons.auto_awesome_outlined;
+      case 'piece_update': return Icons.edit_outlined;
+      case 'rental': return Icons.calendar_today_outlined;
+      case 'rental_status': return Icons.update_rounded;
+      default: return Icons.info_outline_rounded;
+    }
+  }
+
+  Color _typeColor(String type) {
+    switch (type) {
+      case 'order_update': return AppColors.sage;
+      case 'follow': return AppColors.accent;
+      case 'price_drop': return AppColors.gold;
+      case 'message': return AppColors.inkSoft;
+      case 'item_sold': return AppColors.success;
+      case 'new_piece': return AppColors.gold;
+      case 'piece_update': return AppColors.sage;
+      case 'rental': return AppColors.accent;
+      case 'rental_status': return AppColors.sage;
+      default: return AppColors.muted;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -327,6 +392,7 @@ class _NotificationsModal extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // ── Header ──
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -353,28 +419,243 @@ class _NotificationsModal extends StatelessWidget {
                 ),
               ),
               const Divider(color: AppColors.hairline, height: 1, thickness: 1),
+
+              // ── Content ──
               Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(vertical: 48),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.notifications_none_rounded,
-                        size: 36,
-                        color: AppColors.hairline2,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No notifications yet',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: AppColors.muted,
-                          fontWeight: FontWeight.w400,
+                child: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: AppColors.accent,
+                            ),
+                          ),
                         ),
+                      )
+                    : ListenableBuilder(
+                        listenable: NotificationService.instance,
+                        builder: (context, _) {
+                          final notifications =
+                              NotificationService.instance.notifications;
+
+                          if (notifications.isEmpty) {
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 48),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.notifications_none_rounded,
+                                    size: 36,
+                                    color: AppColors.hairline2,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No notifications yet',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      color: AppColors.muted,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          // Show up to 10 recent notifications
+                          final items = notifications.take(10).toList();
+                          final hasUnread =
+                              items.any((n) => !n.isRead);
+
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (hasUnread)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      20, 12, 20, 0),
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        NotificationService.instance
+                                            .markAllRead();
+                                      },
+                                      child: Text(
+                                        'Mark all read',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.accent,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              Flexible(
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 4),
+                                  itemCount: items.length,
+                                  itemBuilder: (_, i) {
+                                    final n = items[i];
+                                    final isUnread = !n.isRead;
+                                    final iconColor =
+                                        _typeColor(n.type);
+
+                                    return GestureDetector(
+                                      onTap: isUnread
+                                          ? () => NotificationService
+                                              .instance
+                                              .markRead(n.id)
+                                          : null,
+                                      behavior:
+                                          HitTestBehavior.opaque,
+                                      child: Padding(
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 20,
+                                                vertical: 10),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment
+                                                  .start,
+                                          children: [
+                                            if (isUnread)
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets
+                                                        .only(
+                                                        top: 6,
+                                                        right: 8),
+                                                child: Container(
+                                                  width: 5,
+                                                  height: 5,
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: AppColors
+                                                        .accent,
+                                                    shape: BoxShape
+                                                        .circle,
+                                                  ),
+                                                ),
+                                              ),
+                                            if (!isUnread)
+                                              const SizedBox(
+                                                  width: 13),
+                                            Container(
+                                              width: 30,
+                                              height: 30,
+                                              decoration:
+                                                  BoxDecoration(
+                                                color: iconColor
+                                                    .withValues(
+                                                        alpha:
+                                                            0.10),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                              alignment:
+                                                  Alignment.center,
+                                              child: Icon(
+                                                _typeIcon(n.type),
+                                                size: 14,
+                                                color: iconColor,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment
+                                                        .start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          n.title,
+                                                          maxLines: 1,
+                                                          overflow:
+                                                              TextOverflow
+                                                                  .ellipsis,
+                                                          style:
+                                                              GoogleFonts
+                                                                  .inter(
+                                                            fontSize:
+                                                                12,
+                                                            fontWeight: isUnread
+                                                                ? FontWeight
+                                                                    .w500
+                                                                : FontWeight
+                                                                    .w400,
+                                                            color: AppColors
+                                                                .inkStrong,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(
+                                                          width: 6),
+                                                      Text(
+                                                        _formatDate(
+                                                            n.createdAt),
+                                                        style:
+                                                            GoogleFonts
+                                                                .inter(
+                                                          fontSize:
+                                                              10,
+                                                          color:
+                                                              AppColors
+                                                                  .muted,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  if (n.body !=
+                                                          null &&
+                                                      n.body!
+                                                          .isNotEmpty) ...[
+                                                    const SizedBox(
+                                                        height: 2),
+                                                    Text(
+                                                      n.body!,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow
+                                                              .ellipsis,
+                                                      style:
+                                                          GoogleFonts
+                                                              .inter(
+                                                        fontSize: 11,
+                                                        color: isUnread
+                                                            ? AppColors
+                                                                .inkSoft
+                                                            : AppColors
+                                                                .muted,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                    ],
-                  ),
-                ),
               ),
             ],
           ),

@@ -295,8 +295,8 @@ onUnmounted(() => {
         </h1>
         <div class="w-16 h-px bg-ink/20 md:mx-0 mx-auto mb-8"></div>
         <p class="font-serif italic text-ink-soft text-lg sm:text-xl md:text-2xl leading-relaxed max-w-xl md:mx-0 mx-auto">
-          Where artisans meet collectors.<br class="hidden sm:block" />
-          Curated craft, collected with care.
+          Where designers meet collectors.<br class="hidden sm:block" />
+          Curated design, collected with intention.
         </p>
       </div>
 
@@ -330,7 +330,7 @@ onUnmounted(() => {
       <span
         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 font-serif text-[18vw] text-white/[0.04] leading-none select-none pointer-events-none whitespace-nowrap"
         :style="{ ...s1Style(0, 0), opacity: s1Visible[0] ? 0.04 : 0 }"
-      >CRAFT</span>
+      >DESIGN</span>
 
       <!-- Center content -->
       <div class="relative z-10 max-w-3xl mx-auto text-center">
@@ -345,7 +345,7 @@ onUnmounted(() => {
           :style="s1Style(1, 60)"
         >
           A marketplace for<br>
-          <span class="italic text-gold">handmade</span> pieces
+          <span class="italic text-gold">design</span> pieces
         </h2>
 
         <!-- Animated divider -->
@@ -358,12 +358,12 @@ onUnmounted(() => {
 
         <!-- Description -->
         <p class="text-white/80 text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-4" :style="s1Style(3, 40)">
-          Chosen Object connects independent artisans with collectors who value craftsmanship,
-          materiality, and the story behind every piece.
+          Chosen Object connects independent designers with collectors who value
+          furniture, lighting, art, and the story behind every piece.
         </p>
         <p class="text-white/50 text-sm leading-relaxed max-w-lg mx-auto" :style="s1Style(4, 40)">
-          Available for iOS and Android. Browse studios, collect pieces, and support the makers
-          shaping contemporary craft.
+          Available for iOS and Android. Browse studios, collect pieces, and support the designers
+          shaping contemporary interiors.
         </p>
       </div>
 
@@ -371,15 +371,15 @@ onUnmounted(() => {
       <div class="absolute bottom-10 sm:bottom-14 left-0 right-0 grid grid-cols-4 gap-4 sm:gap-8 md:gap-20 px-6 sm:px-12 max-w-3xl mx-auto">
         <div class="text-center" :style="s1Style(4, 30)">
           <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">100+</p>
-          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Studios</p>
+          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Designers</p>
         </div>
         <div class="text-center" :style="s1Style(5, 30)">
           <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">500+</p>
           <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Pieces</p>
         </div>
         <div class="text-center" :style="s1Style(6, 30)">
-          <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">12</p>
-          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Disciplines</p>
+          <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">10</p>
+          <p class="text-white/40 text-[9px] sm:text-[11px] tracking-widest uppercase mt-1">Categories</p>
         </div>
         <div class="text-center" :style="s1Style(7, 30)">
           <p class="font-serif text-2xl sm:text-3xl md:text-4xl text-white">EU</p>
@@ -423,7 +423,7 @@ onUnmounted(() => {
               <span class="italic text-white/50">One journey.</span>
             </h2>
             <p class="text-white/50 text-sm sm:text-base leading-relaxed max-w-md mx-auto lg:mx-0" :style="s2Style(2, 40)">
-              From discovery to acquisition, every interaction is designed around the relationship between maker and collector.
+              From discovery to acquisition, every interaction is designed around the relationship between designer and collector.
             </p>
           </div>
 
@@ -440,7 +440,7 @@ onUnmounted(() => {
               <div>
                 <h3 class="font-serif text-xl text-white mb-2">Discover</h3>
                 <p class="text-white/50 text-sm leading-relaxed">
-                  Browse curated artisan studios. Explore ceramics, sculpture, furniture, textiles, lighting, and more.
+                  Browse curated designer studios. Explore furniture, lighting, paintings, sculptures, decor, and more.
                 </p>
               </div>
             </div>
@@ -452,7 +452,7 @@ onUnmounted(() => {
               <div>
                 <h3 class="font-serif text-xl text-white mb-2">Collect</h3>
                 <p class="text-white/50 text-sm leading-relaxed">
-                  Save your favourite pieces, follow studios, and build a personal collection of handcrafted works.
+                  Save your favourite pieces, follow designers, and build a personal collection of unique design objects.
                 </p>
               </div>
             </div>
@@ -464,7 +464,7 @@ onUnmounted(() => {
               <div>
                 <h3 class="font-serif text-xl text-white mb-2">Acquire</h3>
                 <p class="text-white/50 text-sm leading-relaxed">
-                  Purchase outright or rent pieces for your space. Flexible options for every collector.
+                  Purchase or rent design pieces for your space. Flexible options for every collector.
                 </p>
               </div>
             </div>
@@ -496,7 +496,7 @@ onUnmounted(() => {
           Start collecting
         </h2>
         <p class="text-bone/50 text-lg leading-relaxed mb-12 max-w-md mx-auto">
-          Download the app and explore a world of handmade craft. Available on iOS and Android.
+          Download the app and explore a world of design furniture, lighting, and art. Available on iOS and Android.
         </p>
         <div class="flex flex-col sm:flex-row items-center justify-center gap-5">
           <a href="#" class="inline-flex items-center gap-4 bg-white text-ink rounded-2xl px-8 py-5 hover:bg-bone transition-colors duration-300 shadow-lg shadow-white/5">
@@ -539,14 +539,14 @@ onUnmounted(() => {
             <p class="text-ink-strong text-xs font-medium uppercase tracking-widest mb-4">Platform</p>
             <ul class="space-y-2.5">
               <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">Browse pieces</a></li>
-              <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">Explore studios</a></li>
-              <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">Disciplines</a></li>
+              <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">Explore designers</a></li>
+              <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">Categories</a></li>
               <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">How it works</a></li>
             </ul>
           </div>
           <!-- For artisans -->
           <div>
-            <p class="text-ink-strong text-xs font-medium uppercase tracking-widest mb-4">For artisans</p>
+            <p class="text-ink-strong text-xs font-medium uppercase tracking-widest mb-4">For designers</p>
             <ul class="space-y-2.5">
               <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">Start selling</a></li>
               <li><a href="#" class="text-muted text-sm hover:text-ink-soft transition-colors">Pricing</a></li>

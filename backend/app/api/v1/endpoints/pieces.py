@@ -79,6 +79,19 @@ def update_piece(
     return PieceService(db).update_piece(current_user, piece_id, data)
 
 
+@router.patch(
+    "/{piece_id}/toggle-hidden",
+    response_model=PieceOut,
+    summary="Toggle piece visibility (hidden/visible)",
+)
+def toggle_piece_hidden(
+    piece_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> PieceOut:
+    return PieceService(db).toggle_hidden(current_user, piece_id)
+
+
 @router.delete(
     "/{piece_id}/images/{image_id}",
     response_model=PieceOut,

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/browse_service.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen>
   int _offset = 0;
   static const _pageSize = 20;
   bool _hasMore = true;
+  DateTime? _lastBackPress;
 
   @override
   void initState() {
@@ -81,7 +83,35 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final now = DateTime.now();
+        if (_lastBackPress != null &&
+            now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
+          SystemNavigator.pop();
+          return;
+        }
+        _lastBackPress = now;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                'Press back again to exit',
+                style: GoogleFonts.inter(fontSize: 13, color: AppColors.bone),
+              ),
+              duration: const Duration(seconds: 2),
+              backgroundColor: AppColors.ink,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bone,
       drawer: const AppDrawer(currentRoute: '/home'),
       appBar: const SharedAppBar(currentRoute: '/home'),
@@ -191,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen>
           );
         },
       ),
+    ),
     );
   }
 }

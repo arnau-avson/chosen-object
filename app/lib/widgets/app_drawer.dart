@@ -24,6 +24,7 @@ import '../screens/settings/settings_screen.dart';
 import '../screens/list_piece/list_piece_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/rental_calendar/rental_calendar_screen.dart';
+import '../screens/my_pieces/my_pieces_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final String? currentRoute;
@@ -41,7 +42,7 @@ class _AppDrawerState extends State<AppDrawer>
   // ── Secciones ──────────────────────────────────────────────
 
   List<_Section> _buildSections() {
-    final msgCount = MessageService.instance.unreadCount;
+    final msgCount = MessageService.instance.unreadCount + MessageService.instance.requestCount;
     final notifCount = NotificationService.instance.unreadCount;
     final cartCount = CartService.instance.itemCount;
     final role = ProfileService.instance.role.toLowerCase();
@@ -69,6 +70,7 @@ class _AppDrawerState extends State<AppDrawer>
       ]),
       if (isSeller) _Section('Sell', [
         _Item('List a piece',    Icons.add_photo_alternate_outlined,  '/list'),
+        _Item('My pieces',       Icons.inventory_2_outlined,          '/my-pieces'),
         _Item('Dashboard',       Icons.bar_chart_rounded,             '/dashboard'),
         _Item('Rental calendar', Icons.calendar_today_outlined,       '/rental-calendar'),
       ]),
@@ -402,6 +404,8 @@ class _ItemWidget extends StatelessWidget {
         screen = const AddressesScreen();
       case '/list':
         screen = const ListPieceScreen();
+      case '/my-pieces':
+        screen = const MyPiecesScreen();
       case '/dashboard':
         screen = const DashboardScreen();
       case '/rental-calendar':

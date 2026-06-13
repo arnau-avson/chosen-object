@@ -15,6 +15,7 @@ class Piece {
   final int stock;
   final List<String>? shipsTo;
   final String? packaging;
+  final String? description;
   final String status;
   final List<PieceImageData> images;
   final DateTime createdAt;
@@ -33,6 +34,7 @@ class Piece {
     required this.stock,
     this.shipsTo,
     this.packaging,
+    this.description,
     required this.status,
     this.images = const [],
     required this.createdAt,
@@ -52,6 +54,7 @@ class Piece {
         stock: json['stock'] as int? ?? 1,
         shipsTo: (json['ships_to'] as List?)?.cast<String>(),
         packaging: json['packaging'] as String?,
+        description: json['description'] as String?,
         status: json['status'] as String? ?? 'active',
         images: (json['images'] as List?)
                 ?.map(
@@ -75,6 +78,7 @@ class PieceListItem {
   final String? year;
   final int priceCents;
   final bool rental;
+  final bool isHidden;
   final String status;
   final Uint8List? coverImageBytes;
   final DateTime createdAt;
@@ -86,6 +90,7 @@ class PieceListItem {
     this.year,
     required this.priceCents,
     required this.rental,
+    this.isHidden = false,
     required this.status,
     this.coverImageBytes,
     required this.createdAt,
@@ -98,6 +103,7 @@ class PieceListItem {
         year: json['year'] as String?,
         priceCents: json['price_cents'] as int,
         rental: json['rental'] as bool? ?? false,
+        isHidden: json['is_hidden'] as bool? ?? false,
         status: json['status'] as String? ?? 'active',
         coverImageBytes: json['cover_image_b64'] != null
             ? base64Decode(json['cover_image_b64'] as String)
