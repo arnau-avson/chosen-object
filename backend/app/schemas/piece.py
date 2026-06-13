@@ -84,7 +84,10 @@ class PieceOut(BaseModel):
     def from_model(cls, piece: Piece) -> "PieceOut":
         ships_to_list = None
         if piece.ships_to:
-            ships_to_list = json.loads(piece.ships_to)
+            try:
+                ships_to_list = json.loads(piece.ships_to)
+            except (json.JSONDecodeError, TypeError):
+                ships_to_list = [s.strip() for s in piece.ships_to.split(",") if s.strip()]
 
         return cls(
             id=piece.id,

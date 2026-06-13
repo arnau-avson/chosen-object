@@ -8,7 +8,6 @@ import '../core/notification_service.dart';
 import '../core/profile_service.dart';
 import '../core/push_notification_service.dart';
 import '../screens/auth/login_screen.dart';
-import '../screens/home/home_screen.dart';
 import '../screens/map/map_screen.dart';
 import '../screens/search/search_screen.dart';
 import '../screens/collection/collection_screen.dart';
@@ -357,6 +356,7 @@ class _SectionWidget extends StatelessWidget {
           (item) => _ItemWidget(
             item: item,
             isActive: currentRoute == item.route,
+            currentRoute: currentRoute,
           ),
         ),
       ],
@@ -369,15 +369,22 @@ class _SectionWidget extends StatelessWidget {
 class _ItemWidget extends StatelessWidget {
   final _Item item;
   final bool isActive;
-  const _ItemWidget({required this.item, required this.isActive});
+  final String? currentRoute;
+  const _ItemWidget({required this.item, required this.isActive, this.currentRoute});
 
   void _navigateTo(BuildContext context, String route) {
     if (isActive) return;
 
+    // Going to Home: pop back to it (it's always at the bottom of the stack)
+    if (route == '/home') {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
     Widget? screen;
     switch (route) {
-      case '/home':
-        screen = const HomeScreen();
       case '/map':
         screen = const MapScreen();
       case '/search':
@@ -413,14 +420,20 @@ class _ItemWidget extends StatelessWidget {
     }
 
     if (screen != null) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, _, _) => screen!,
-          transitionsBuilder: (_, animation, _, child) =>
-              FadeTransition(opacity: animation, child: child),
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
+      final pageRoute = PageRouteBuilder(
+        pageBuilder: (_, _, _) => screen!,
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
       );
+
+      // From Home: push (keep Home in the stack so back returns to it)
+      // From non-Home: replace (avoid stacking multiple screens)
+      if (currentRoute == '/home') {
+        Navigator.of(context).push(pageRoute);
+      } else {
+        Navigator.of(context).pushReplacement(pageRoute);
+      }
     }
   }
 

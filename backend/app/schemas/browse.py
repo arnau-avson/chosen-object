@@ -41,7 +41,10 @@ class BrowsePieceOut(BaseModel):
     ) -> "BrowsePieceOut":
         ships_to_list = None
         if piece.ships_to:
-            ships_to_list = json.loads(piece.ships_to)
+            try:
+                ships_to_list = json.loads(piece.ships_to)
+            except (json.JSONDecodeError, TypeError):
+                ships_to_list = [s.strip() for s in piece.ships_to.split(",") if s.strip()]
 
         cover_b64 = None
         if piece.images:
@@ -88,7 +91,10 @@ class BrowsePieceDetailOut(BrowsePieceOut):
     ) -> "BrowsePieceDetailOut":
         ships_to_list = None
         if piece.ships_to:
-            ships_to_list = json.loads(piece.ships_to)
+            try:
+                ships_to_list = json.loads(piece.ships_to)
+            except (json.JSONDecodeError, TypeError):
+                ships_to_list = [s.strip() for s in piece.ships_to.split(",") if s.strip()]
 
         cover_b64 = None
         images_list = []
