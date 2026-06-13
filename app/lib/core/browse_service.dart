@@ -189,9 +189,14 @@ class BrowseService extends ChangeNotifier {
 
       final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
       final data = await ApiClient.instance.get('/browse/pieces?$query');
-      _pieces = (data as List)
+      final newPieces = (data as List)
           .map((j) => BrowsePiece.fromJson(j as Map<String, dynamic>))
           .toList();
+      if (offset > 0) {
+        _pieces = [..._pieces, ...newPieces];
+      } else {
+        _pieces = newPieces;
+      }
     } catch (_) {
       // Keep existing list on failure
     }

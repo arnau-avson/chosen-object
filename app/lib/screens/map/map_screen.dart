@@ -8,61 +8,10 @@ import 'package:latlong2/latlong.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/browse_service.dart';
+import '../../core/geocoding_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
 import '../product_detail/product_detail_screen.dart';
-
-// ═════════════════════════════════════════════════════════════
-// ── City → LatLng lookup ────────────────────────────────────
-// ═════════════════════════════════════════════════════════════
-
-const Map<String, LatLng> _cityCoords = {
-  'barcelona': LatLng(41.3874, 2.1686),
-  'girona': LatLng(41.9794, 2.8214),
-  'valencia': LatLng(39.4699, -0.3763),
-  'madrid': LatLng(40.4168, -3.7038),
-  'seville': LatLng(37.3891, -5.9845),
-  'sevilla': LatLng(37.3891, -5.9845),
-  'terrassa': LatLng(41.5630, 2.0089),
-  'palma': LatLng(39.5696, 2.6502),
-  'palma de mallorca': LatLng(39.5696, 2.6502),
-  'milan': LatLng(45.4642, 9.1900),
-  'milano': LatLng(45.4642, 9.1900),
-  'lisbon': LatLng(38.7223, -9.1393),
-  'lisboa': LatLng(38.7223, -9.1393),
-  'bilbao': LatLng(43.2630, -2.9350),
-  'paris': LatLng(48.8566, 2.3522),
-  'london': LatLng(51.5074, -0.1278),
-  'berlin': LatLng(52.5200, 13.4050),
-  'rome': LatLng(41.9028, 12.4964),
-  'roma': LatLng(41.9028, 12.4964),
-  'amsterdam': LatLng(52.3676, 4.9041),
-  'porto': LatLng(41.1579, -8.6291),
-  'marseille': LatLng(43.2965, 5.3698),
-  'lyon': LatLng(45.7640, 4.8357),
-  'florence': LatLng(43.7696, 11.2558),
-  'firenze': LatLng(43.7696, 11.2558),
-  'malaga': LatLng(36.7213, -4.4214),
-  'zaragoza': LatLng(41.6488, -0.8891),
-  'san sebastian': LatLng(43.3183, -1.9812),
-  'donostia': LatLng(43.3183, -1.9812),
-  'bruges': LatLng(51.2093, 3.2247),
-  'antwerp': LatLng(51.2194, 4.4025),
-  'vienna': LatLng(48.2082, 16.3738),
-  'munich': LatLng(48.1351, 11.5820),
-  'zurich': LatLng(47.3769, 8.5417),
-  'copenhagen': LatLng(55.6761, 12.5683),
-  'stockholm': LatLng(59.3293, 18.0686),
-  'brussels': LatLng(50.8503, 4.3517),
-  'athens': LatLng(37.9838, 23.7275),
-  'prague': LatLng(50.0755, 14.4378),
-  'budapest': LatLng(47.4979, 19.0402),
-};
-
-LatLng? _coordsForCity(String? city) {
-  if (city == null || city.isEmpty) return null;
-  return _cityCoords[city.toLowerCase().trim()];
-}
 
 // ═════════════════════════════════════════════════════════════
 // ── City cluster model ──────────────────────────────────────
@@ -110,27 +59,38 @@ class _MapScreenState extends State<MapScreen> {
       search: search,
       limit: 100,
     );
-    _buildClusters();
+    await _buildClusters();
     if (mounted) setState(() => _loading = false);
   }
 
-  void _buildClusters() {
+  Future<void> _buildClusters() async {
     final pieces = BrowseService.instance.pieces;
-    final Map<String, _CityCluster> map = {};
 
+    // Collect unique city names and geocode them
+    final cityNames = pieces
+        .map((p) => p.sellerCity)
+        .where((c) => c != null && c.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+
+    final coords = await GeocodingService.instance.geocodeAll(cityNames);
+
+    final Map<String, _CityCluster> map = {};
     for (final piece in pieces) {
       final city = piece.sellerCity;
       if (city == null || city.isEmpty) continue;
-      final coords = _coordsForCity(city);
-      if (coords == null) continue;
 
       final key = city.toLowerCase().trim();
+      final position = coords[key];
+      if (position == null) continue;
+
       if (map.containsKey(key)) {
         map[key]!.pieces.add(piece);
       } else {
         map[key] = _CityCluster(
           city: city,
-          position: coords,
+          position: position,
           pieces: [piece],
         );
       }
@@ -207,8 +167,8 @@ class _MapScreenState extends State<MapScreen> {
             sort: sort,
             pieceType: pieceType,
             limit: 100,
-          ).then((_) {
-            _buildClusters();
+          ).then((_) async {
+            await _buildClusters();
             if (mounted) setState(() {});
           });
         },

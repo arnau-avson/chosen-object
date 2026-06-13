@@ -25,7 +25,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   bool _loadingMore = false;
   int _offset = 0;
-  static const _pageSize = 20;
+  static const _pageSize = 6;
+  static const _maxPieces = 20;
   bool _hasMore = true;
   DateTime? _lastBackPress;
 
@@ -42,20 +43,24 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _initialLoad() async {
     await BrowseService.instance.fetchPieces(offset: 0, limit: _pageSize);
     if (!mounted) return;
+    final pieces = BrowseService.instance.pieces;
     setState(() {
-      _offset = BrowseService.instance.pieces.length;
-      _hasMore = BrowseService.instance.pieces.length >= _pageSize;
+      _offset = pieces.length;
+      _hasMore = pieces.length >= _pageSize && pieces.length < _maxPieces;
     });
   }
 
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
+    final prevCount = BrowseService.instance.pieces.length;
     await BrowseService.instance.fetchPieces(offset: _offset, limit: _pageSize);
     if (!mounted) return;
+    final pieces = BrowseService.instance.pieces;
+    final newCount = pieces.length - prevCount;
     setState(() {
-      _offset = BrowseService.instance.pieces.length;
-      _hasMore = BrowseService.instance.pieces.length >= _offset;
+      _offset = pieces.length;
+      _hasMore = newCount >= _pageSize && pieces.length < _maxPieces;
       _loadingMore = false;
     });
   }
