@@ -16,6 +16,7 @@ from .endpoints import (
     profile,
     rentals,
     settings,
+    websocket,
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -35,3 +36,4 @@ router.include_router(messages.router)
 router.include_router(notifications.router)
 router.include_router(dashboard.router)
 router.include_router(device_tokens.router)
+router.include_router(websocket.router)

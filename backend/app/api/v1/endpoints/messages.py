@@ -14,6 +14,7 @@ from app.schemas.message import (
     SendMessageIn,
 )
 from app.services.message_service import MessageService
+from app.services.websocket_manager import ConnectionManager
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -72,13 +73,31 @@ def get_messages(
     status_code=201,
     summary="Send message",
 )
-def send_message(
+async def send_message(
     conversation_id: int,
     data: SendMessageIn,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> MessageOut:
-    return MessageService(db).send_message(current_user, conversation_id, data)
+    result = MessageService(db).send_message(current_user, conversation_id, data)
+    # Broadcast via WebSocket to connected participants
+    await ConnectionManager.get_instance().broadcast(
+        conversation_id,
+        {
+            "type": "message",
+            "data": {
+                "id": result.id,
+                "conversation_id": result.conversation_id,
+                "sender_id": result.sender_id,
+                "sender_username": result.sender_username,
+                "text": result.text,
+                "reply_to_id": result.reply_to_id,
+                "reaction": result.reaction,
+                "created_at": result.created_at.isoformat(),
+            },
+        },
+    )
+    return result
 
 
 @router.patch(
@@ -122,13 +141,25 @@ def decline_conversation(
     response_model=MessageOut,
     summary="Set reaction on message",
 )
-def set_reaction(
+async def set_reaction(
     message_id: int,
     data: ReactionIn,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> MessageOut:
-    return MessageService(db).set_reaction(current_user, message_id, data)
+    result = MessageService(db).set_reaction(current_user, message_id, data)
+    # Broadcast reaction via WebSocket
+    await ConnectionManager.get_instance().broadcast(
+        result.conversation_id,
+        {
+            "type": "reaction",
+            "data": {
+                "message_id": result.id,
+                "reaction": result.reaction,
+            },
+        },
+    )
+    return result
 
 
 @router.get(

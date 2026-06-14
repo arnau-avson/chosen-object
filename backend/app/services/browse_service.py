@@ -32,18 +32,27 @@ class BrowseService:
             offset=offset,
             limit=limit,
         )
+        if not pieces:
+            return []
 
-        results = []
-        for piece in pieces:
-            is_saved = False
-            if current_user:
-                is_saved = self.repo.is_saved(current_user.id, piece.id)
+        # Batch: saved check (1 query instead of N)
+        piece_ids = [p.id for p in pieces]
+        saved_ids: set[int] = set()
+        if current_user:
+            saved_ids = self.repo.get_saved_piece_ids(current_user.id, piece_ids)
 
-            seller = self.repo.get_user_by_id(piece.user_id)
-            results.append(
-                BrowsePieceOut.from_model(piece, seller=seller, is_saved=is_saved)
+        # Batch: seller lookup (1 query instead of N, BLOBs deferred)
+        seller_ids = list({p.user_id for p in pieces})
+        sellers = self.repo.get_sellers_by_ids(seller_ids)
+
+        return [
+            BrowsePieceOut.from_model(
+                piece,
+                seller=sellers.get(piece.user_id),
+                is_saved=piece.id in saved_ids,
             )
-        return results
+            for piece in pieces
+        ]
 
     def get_piece_detail(
         self, piece_id: int, current_user: User | None
@@ -75,27 +84,34 @@ class BrowseService:
             offset=offset,
             limit=limit,
         )
+        if not users:
+            return []
 
-        results = []
-        for user in users:
-            is_following = False
-            if current_user and current_user.id != user.id:
-                is_following = self.repo.is_following(current_user.id, user.id)
+        user_ids = [u.id for u in users]
 
-            followers_count = self.repo.get_followers_count(user.id)
-            following_count = self.repo.get_following_count(user.id)
-            pieces_count = self.repo.get_pieces_count(user.id)
+        # Batch: follow checks (2 queries instead of 2N)
+        following_set: set[int] = set()
+        follows_back_set: set[int] = set()
+        if current_user:
+            following_set = self.repo.get_following_set(current_user.id, user_ids)
+            follows_back_set = self.repo.get_followers_set(current_user.id, user_ids)
 
-            results.append(
-                BrowseUserOut.from_model(
-                    user,
-                    is_following=is_following,
-                    followers_count=followers_count,
-                    following_count=following_count,
-                    pieces_count=pieces_count,
-                )
+        # Batch: counts (3 queries instead of 3N)
+        followers_counts = self.repo.get_bulk_followers_counts(user_ids)
+        following_counts = self.repo.get_bulk_following_counts(user_ids)
+        pieces_counts = self.repo.get_bulk_pieces_counts(user_ids)
+
+        return [
+            BrowseUserOut.from_model(
+                user,
+                is_following=user.id in following_set,
+                follows_back=user.id in follows_back_set,
+                followers_count=followers_counts.get(user.id, 0),
+                following_count=following_counts.get(user.id, 0),
+                pieces_count=pieces_counts.get(user.id, 0),
             )
-        return results
+            for user in users
+        ]
 
     def get_user_pieces(
         self,
@@ -105,16 +121,27 @@ class BrowseService:
         limit: int = 20,
     ) -> list[BrowsePieceOut]:
         pieces = self.repo.get_user_pieces(user_id, offset=offset, limit=limit)
-        results = []
-        for piece in pieces:
-            is_saved = False
-            if current_user:
-                is_saved = self.repo.is_saved(current_user.id, piece.id)
-            seller = self.repo.get_user_by_id(piece.user_id)
-            results.append(
-                BrowsePieceOut.from_model(piece, seller=seller, is_saved=is_saved)
+        if not pieces:
+            return []
+
+        # Batch: saved check (1 query instead of N)
+        piece_ids = [p.id for p in pieces]
+        saved_ids: set[int] = set()
+        if current_user:
+            saved_ids = self.repo.get_saved_piece_ids(current_user.id, piece_ids)
+
+        # Batch: seller lookup (1 query instead of N, BLOBs deferred)
+        seller_ids = list({p.user_id for p in pieces})
+        sellers = self.repo.get_sellers_by_ids(seller_ids)
+
+        return [
+            BrowsePieceOut.from_model(
+                piece,
+                seller=sellers.get(piece.user_id),
+                is_saved=piece.id in saved_ids,
             )
-        return results
+            for piece in pieces
+        ]
 
     def get_user_profile(
         self, user_id: int, current_user: User | None
@@ -127,8 +154,10 @@ class BrowseService:
             )
 
         is_following = False
+        follows_back = False
         if current_user and current_user.id != user.id:
             is_following = self.repo.is_following(current_user.id, user.id)
+            follows_back = self.repo.is_following(user.id, current_user.id)
 
         followers_count = self.repo.get_followers_count(user.id)
         following_count = self.repo.get_following_count(user.id)
@@ -137,6 +166,7 @@ class BrowseService:
         return BrowseUserOut.from_model(
             user,
             is_following=is_following,
+            follows_back=follows_back,
             followers_count=followers_count,
             following_count=following_count,
             pieces_count=pieces_count,

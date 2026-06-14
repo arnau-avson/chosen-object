@@ -8,6 +8,9 @@ import '../core/message_service.dart';
 import '../core/notification_service.dart';
 import '../screens/collection/collection_screen.dart';
 import '../screens/home/home_screen.dart';
+import '../screens/messages/messages_screen.dart';
+import '../screens/product_detail/product_detail_screen.dart';
+import '../screens/profile/user_profile_screen.dart';
 
 class SharedAppBar extends StatefulWidget implements PreferredSizeWidget {
   final String? currentRoute;
@@ -286,13 +289,26 @@ class _SharedAppBarState extends State<SharedAppBar>
                           );
                         },
                       ),
-                      IconButton(
-                        icon: const Icon(
-                            Icons.notifications_none_rounded,
-                            size: 22),
-                        tooltip: 'Notifications',
-                        color: AppColors.inkSoft,
-                        onPressed: () => _showNotificationsModal(context),
+                      ListenableBuilder(
+                        listenable: NotificationService.instance,
+                        builder: (context, _) {
+                          final unread =
+                              NotificationService.instance.unreadCount;
+                          return IconButton(
+                            icon: Badge(
+                              isLabelVisible: unread > 0,
+                              smallSize: 8,
+                              backgroundColor: const Color(0xFFCC3333),
+                              child: const Icon(
+                                  Icons.notifications_none_rounded,
+                                  size: 22),
+                            ),
+                            tooltip: 'Notifications',
+                            color: AppColors.inkSoft,
+                            onPressed: () =>
+                                _showNotificationsModal(context),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -372,6 +388,54 @@ class _NotificationsModalState extends State<_NotificationsModal> {
       case 'rental': return AppColors.accent;
       case 'rental_status': return AppColors.sage;
       default: return AppColors.muted;
+    }
+  }
+
+  void _navigateToNotification(BuildContext context, NotificationData n) {
+    Navigator.of(context).pop(); // close modal first
+
+    final ref = n.referenceId;
+    final type = n.referenceType ?? n.type;
+
+    Widget? destination;
+    switch (type) {
+      case 'user':
+      case 'follow':
+        if (ref != null) {
+          destination = UserProfileScreen(userId: ref.toString());
+        }
+        break;
+      case 'piece':
+      case 'new_piece':
+      case 'piece_update':
+      case 'price_drop':
+        if (ref != null) {
+          destination = ProductDetailScreen(pieceId: ref);
+        }
+        break;
+      case 'message':
+      case 'conversation':
+        destination = const MessagesScreen();
+        break;
+      case 'order':
+      case 'order_update':
+      case 'item_sold':
+      case 'rental':
+      case 'rental_status':
+        // Navigate to messages as a fallback for order-related
+        destination = const MessagesScreen();
+        break;
+    }
+
+    if (destination != null) {
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (_, _, _) => destination!,
+          transitionsBuilder: (_, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+      );
     }
   }
 
@@ -511,11 +575,14 @@ class _NotificationsModalState extends State<_NotificationsModal> {
                                         _typeColor(n.type);
 
                                     return GestureDetector(
-                                      onTap: isUnread
-                                          ? () => NotificationService
-                                              .instance
-                                              .markRead(n.id)
-                                          : null,
+                                      onTap: () {
+                                        if (isUnread) {
+                                          NotificationService.instance
+                                              .markRead(n.id);
+                                        }
+                                        _navigateToNotification(
+                                            context, n);
+                                      },
                                       behavior:
                                           HitTestBehavior.opaque,
                                       child: Padding(

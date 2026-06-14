@@ -77,9 +77,52 @@ class MessageService:
         self, user: User, requests: bool = False, offset: int = 0, limit: int = 20
     ) -> list[ConversationOut]:
         results = self.repo.get_conversations(user.id, requests, offset, limit)
+        if not results:
+            return []
+
+        conv_ids = [conv.id for conv, _ in results]
+
+        # Batch: other participants (1 query instead of N)
+        other_parts = self.repo.get_other_participants_batch(conv_ids, user.id)
+
+        # Batch: other users (1 query instead of N)
+        other_user_ids = [
+            p.user_id for p in other_parts.values() if p is not None
+        ]
+        other_users = self.repo.get_users_by_ids(other_user_ids) if other_user_ids else {}
+
+        # Batch: last messages (1 query instead of N)
+        last_msgs = self.repo.get_last_messages_batch(conv_ids)
+
+        # Batch: unread counts (1 query instead of N)
+        unread_counts = self.repo.get_unread_counts_batch(conv_ids, user.id)
+
         outputs = []
-        for conv, _ in results:
-            outputs.append(self._build_conversation_out(conv, user))
+        for conv, my_participant in results:
+            other_part = other_parts.get(conv.id)
+            other_user = other_users.get(other_part.user_id) if other_part else None
+            last_msg = last_msgs.get(conv.id)
+
+            avatar_b64 = None
+            if other_user and other_user.avatar_image:
+                avatar_b64 = base64.b64encode(other_user.avatar_image).decode("ascii")
+
+            outputs.append(
+                ConversationOut(
+                    id=conv.id,
+                    other_user_id=other_user.id if other_user else 0,
+                    other_username=other_user.username if other_user else None,
+                    other_avatar_type=other_user.avatar_type if other_user else "color",
+                    other_avatar_color=other_user.avatar_color if other_user else "#2E2520",
+                    other_avatar_image_b64=avatar_b64,
+                    last_message=last_msg.text if last_msg else None,
+                    last_message_at=last_msg.created_at if last_msg else None,
+                    unread_count=unread_counts.get(conv.id, 0),
+                    is_request=my_participant.is_request if my_participant else False,
+                    request_accepted=my_participant.request_accepted if my_participant else False,
+                    updated_at=conv.updated_at,
+                )
+            )
         return outputs
 
     def get_messages(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/message_service.dart';
+import '../../core/websocket_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
 
@@ -758,9 +759,55 @@ class ConversationScreenState extends State<ConversationScreen>
     )..forward();
 
     _loadMessages();
+    _connectWebSocket();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MessageService.instance.markAsRead(widget.conversationId);
+    });
+  }
+
+  void _connectWebSocket() {
+    final ws = WebSocketService.instance;
+    ws.connect(widget.conversationId);
+    ws.onMessage = _onWsMessage;
+    ws.onReaction = _onWsReaction;
+  }
+
+  void _onWsMessage(ChatMessage msg) {
+    if (!mounted) return;
+    // Avoid duplicates
+    if (_messages.any((m) => m.id == msg.id)) return;
+    setState(() => _messages.add(msg));
+    // Auto-scroll to newest
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+    // Mark as read
+    WebSocketService.instance.sendRead();
+  }
+
+  void _onWsReaction(int messageId, String? reaction) {
+    if (!mounted) return;
+    final idx = _messages.indexWhere((m) => m.id == messageId);
+    if (idx == -1) return;
+    final old = _messages[idx];
+    setState(() {
+      _messages[idx] = ChatMessage(
+        id: old.id,
+        conversationId: old.conversationId,
+        senderId: old.senderId,
+        senderUsername: old.senderUsername,
+        text: old.text,
+        replyToId: old.replyToId,
+        reaction: reaction,
+        createdAt: old.createdAt,
+      );
     });
   }
 
@@ -797,6 +844,7 @@ class ConversationScreenState extends State<ConversationScreen>
 
   @override
   void dispose() {
+    WebSocketService.instance.disconnect();
     _highlightTimer?.cancel();
     _anim.dispose();
     _textController.dispose();
@@ -807,18 +855,26 @@ class ConversationScreenState extends State<ConversationScreen>
   void _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-    final sent = await MessageService.instance.sendMessage(
-      widget.conversationId,
-      text,
-      replyToId: _replyingTo?.id,
-    );
     _textController.clear();
+    final replyId = _replyingTo?.id;
     setState(() => _replyingTo = null);
-    if (sent != null && mounted) {
-      setState(() {
-        _messages.add(sent);
-      });
+
+    final ws = WebSocketService.instance;
+    if (ws.connected && ws.conversationId == widget.conversationId) {
+      // Send via WebSocket — server will broadcast back (including to sender)
+      ws.sendMessage(text, replyToId: replyId);
+    } else {
+      // Fallback to REST
+      final sent = await MessageService.instance.sendMessage(
+        widget.conversationId,
+        text,
+        replyToId: replyId,
+      );
+      if (sent != null && mounted) {
+        setState(() => _messages.add(sent));
+      }
     }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -1140,8 +1196,13 @@ class _ChatBubble extends StatelessWidget {
               ),
               child: _ReactionBar(
                 onSelect: (emoji) {
-                  MessageService.instance
-                      .reactToMessage(message.id, emoji);
+                  final ws = WebSocketService.instance;
+                  if (ws.connected) {
+                    ws.sendReaction(message.id, emoji);
+                  } else {
+                    MessageService.instance
+                        .reactToMessage(message.id, emoji);
+                  }
                   Navigator.of(ctx).pop();
                 },
               ),
@@ -1324,8 +1385,15 @@ class _ChatBubble extends StatelessWidget {
                     left: isMine ? null : 8,
                     right: isMine ? 8 : null,
                     child: GestureDetector(
-                      onTap: () => MessageService.instance.reactToMessage(
-                          message.id, message.reaction!),
+                      onTap: () {
+                        final ws = WebSocketService.instance;
+                        if (ws.connected) {
+                          ws.sendReaction(message.id, message.reaction!);
+                        } else {
+                          MessageService.instance.reactToMessage(
+                              message.id, message.reaction!);
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),

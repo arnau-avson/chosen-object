@@ -34,6 +34,11 @@ class _SearchScreenState extends State<SearchScreen>
   List<BrowseUser> _users = [];
   bool _loadingPieces = false;
   bool _loadingUsers = false;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _offset = 0;
+  static const _pageSize = 6;
+  static const _maxPieces = 20;
 
   // ── Recent users ──
   List<BrowseUser> _recentUsers = [];
@@ -49,7 +54,7 @@ class _SearchScreenState extends State<SearchScreen>
       duration: const Duration(milliseconds: 600),
     )..forward();
     _loadRecentUsers();
-    _searchPieces();
+    _resetAndSearch();
     BrowseService.instance.addListener(_onBrowseChanged);
   }
 
@@ -137,7 +142,7 @@ class _SearchScreenState extends State<SearchScreen>
   void _onSearchChanged(String _) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {
-      _searchPieces();
+      _resetAndSearch();
       if (_hasQuery) {
         _searchUsers();
       } else {
@@ -146,18 +151,38 @@ class _SearchScreenState extends State<SearchScreen>
     });
   }
 
+  void _resetAndSearch() {
+    _offset = 0;
+    _hasMore = true;
+    _pieces = [];
+    _searchPieces();
+  }
+
   Future<void> _searchPieces() async {
-    setState(() => _loadingPieces = true);
+    setState(() => _loadingPieces = _offset == 0);
     final query = _searchController.text.trim();
     await BrowseService.instance.fetchPieces(
       search: query.isEmpty ? null : query,
-      limit: 20,
+      sort: query.isEmpty ? 'random' : null,
+      limit: _pageSize,
+      offset: _offset,
     );
     if (!mounted) return;
+    final allPieces = BrowseService.instance.pieces;
+    final newCount = allPieces.length - _pieces.length;
     setState(() {
-      _pieces = BrowseService.instance.pieces;
+      _pieces = List.of(allPieces);
+      _offset = _pieces.length;
+      _hasMore = newCount >= _pageSize && _pieces.length < _maxPieces;
       _loadingPieces = false;
     });
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    await _searchPieces();
+    if (mounted) setState(() => _loadingMore = false);
   }
 
   Future<void> _searchUsers() async {
@@ -371,7 +396,12 @@ class _SearchScreenState extends State<SearchScreen>
                         padding: EdgeInsets.symmetric(vertical: 64),
                         child: Center(child: LoadingSpinner()),
                       )
-                    : _ProductsGridBox(pieces: _pieces)),
+                    : _ProductsGridBox(
+                        pieces: _pieces,
+                        hasMore: _hasMore,
+                        loadingMore: _loadingMore,
+                        onLoadMore: _loadMore,
+                      )),
           ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -474,7 +504,16 @@ class _TabLabel extends StatelessWidget {
 
 class _ProductsGridBox extends StatefulWidget {
   final List<BrowsePiece> pieces;
-  const _ProductsGridBox({required this.pieces});
+  final bool hasMore;
+  final bool loadingMore;
+  final VoidCallback onLoadMore;
+
+  const _ProductsGridBox({
+    required this.pieces,
+    required this.hasMore,
+    required this.loadingMore,
+    required this.onLoadMore,
+  });
 
   @override
   State<_ProductsGridBox> createState() => _ProductsGridBoxState();
@@ -520,34 +559,70 @@ class _ProductsGridBoxState extends State<_ProductsGridBox>
     }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: pieces.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 14,
-          mainAxisSpacing: 24,
-          childAspectRatio: 0.58,
-        ),
-        itemBuilder: (_, i) {
-          final start = (i * 0.07).clamp(0.0, 0.55);
-          final end = (start + 0.45).clamp(0.0, 1.0);
-          final curve = CurvedAnimation(
-            parent: _ctrl,
-            curve: Interval(start, end, curve: Curves.easeOut),
-          );
-          return FadeTransition(
-            opacity: curve,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.12),
-                end: Offset.zero,
-              ).animate(curve),
-              child: _ProductCard(piece: pieces[i]),
+      child: Column(
+        children: [
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: pieces.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 24,
+              childAspectRatio: 0.58,
             ),
-          );
-        },
+            itemBuilder: (_, i) {
+              final start = (i * 0.07).clamp(0.0, 0.55);
+              final end = (start + 0.45).clamp(0.0, 1.0);
+              final curve = CurvedAnimation(
+                parent: _ctrl,
+                curve: Interval(start, end, curve: Curves.easeOut),
+              );
+              return FadeTransition(
+                opacity: curve,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.12),
+                    end: Offset.zero,
+                  ).animate(curve),
+                  child: _ProductCard(piece: pieces[i]),
+                ),
+              );
+            },
+          ),
+          if (widget.hasMore)
+            Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: GestureDetector(
+                onTap: widget.loadingMore ? null : widget.onLoadMore,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 11),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.hairline, width: 1),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: widget.loadingMore
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: AppColors.inkSoft,
+                          ),
+                        )
+                      : Text(
+                          'Load more',
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

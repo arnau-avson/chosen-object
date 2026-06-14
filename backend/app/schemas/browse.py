@@ -152,6 +152,7 @@ class BrowseUserOut(BaseModel):
     banner_color: str = "#4A3F35"
     banner_image_b64: str | None = None
     is_following: bool = False
+    follows_back: bool = False
     followers_count: int = 0
     following_count: int = 0
     pieces_count: int = 0
@@ -161,6 +162,7 @@ class BrowseUserOut(BaseModel):
         cls,
         user: User,
         is_following: bool = False,
+        follows_back: bool = False,
         followers_count: int = 0,
         following_count: int = 0,
         pieces_count: int = 0,
@@ -187,6 +189,7 @@ class BrowseUserOut(BaseModel):
             banner_color=user.banner_color,
             banner_image_b64=banner_b64,
             is_following=is_following,
+            follows_back=follows_back,
             followers_count=followers_count,
             following_count=following_count,
             pieces_count=pieces_count,

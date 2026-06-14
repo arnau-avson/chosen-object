@@ -186,16 +186,26 @@ class MessageRepository:
         )
 
     def get_total_unread_count(self, user_id: int) -> int:
-        """Get total unread messages across all conversations."""
-        participants = (
-            self.db.query(ConversationParticipant)
-            .filter(ConversationParticipant.user_id == user_id)
-            .all()
+        """Get total unread messages across all conversations. 1 query."""
+        result = (
+            self.db.query(func.count(Message.id))
+            .join(
+                ConversationParticipant,
+                and_(
+                    ConversationParticipant.conversation_id == Message.conversation_id,
+                    ConversationParticipant.user_id == user_id,
+                ),
+            )
+            .filter(
+                Message.sender_id != user_id,
+                or_(
+                    ConversationParticipant.last_read_at.is_(None),
+                    Message.created_at > ConversationParticipant.last_read_at,
+                ),
+            )
+            .scalar()
         )
-        total = 0
-        for p in participants:
-            total += self.get_unread_count(p.conversation_id, user_id)
-        return total
+        return result or 0
 
     def mark_read(self, conversation_id: int, user_id: int) -> None:
         participant = self.get_participant(conversation_id, user_id)
@@ -230,3 +240,94 @@ class MessageRepository:
     def update_conversation_timestamp(self, conversation: Conversation) -> None:
         conversation.updated_at = datetime.now(timezone.utc)
         self.db.flush()
+
+    # ── Batch queries (N+1 elimination) ────────────────────────
+
+    def get_other_participants_batch(
+        self, conversation_ids: list[int], user_id: int
+    ) -> dict[int, ConversationParticipant]:
+        """Get other participants for multiple conversations. 1 query."""
+        if not conversation_ids:
+            return {}
+        rows = (
+            self.db.query(ConversationParticipant)
+            .filter(
+                ConversationParticipant.conversation_id.in_(conversation_ids),
+                ConversationParticipant.user_id != user_id,
+            )
+            .all()
+        )
+        return {p.conversation_id: p for p in rows}
+
+    def get_users_by_ids(self, user_ids: list[int]) -> dict[int, User]:
+        """Load multiple users by ID. 1 query."""
+        if not user_ids:
+            return {}
+        users = (
+            self.db.query(User)
+            .filter(User.id.in_(user_ids))
+            .all()
+        )
+        return {u.id: u for u in users}
+
+    def get_last_messages_batch(
+        self, conversation_ids: list[int]
+    ) -> dict[int, Message]:
+        """Get last message for multiple conversations. 1 query."""
+        if not conversation_ids:
+            return {}
+        from sqlalchemy import desc
+        # Subquery to get max message id per conversation
+        subq = (
+            self.db.query(
+                Message.conversation_id,
+                func.max(Message.id).label("max_id"),
+            )
+            .filter(Message.conversation_id.in_(conversation_ids))
+            .group_by(Message.conversation_id)
+            .subquery()
+        )
+        rows = (
+            self.db.query(Message)
+            .join(subq, Message.id == subq.c.max_id)
+            .all()
+        )
+        return {m.conversation_id: m for m in rows}
+
+    def get_unread_counts_batch(
+        self, conversation_ids: list[int], user_id: int
+    ) -> dict[int, int]:
+        """Get unread counts for multiple conversations. 1 query."""
+        if not conversation_ids:
+            return {}
+
+        counts: dict[int, int] = {cid: 0 for cid in conversation_ids}
+
+        # Single query: join messages with participant last_read_at
+        rows = (
+            self.db.query(
+                Message.conversation_id,
+                func.count(Message.id),
+            )
+            .join(
+                ConversationParticipant,
+                and_(
+                    ConversationParticipant.conversation_id == Message.conversation_id,
+                    ConversationParticipant.user_id == user_id,
+                ),
+            )
+            .filter(
+                Message.conversation_id.in_(conversation_ids),
+                Message.sender_id != user_id,
+                or_(
+                    ConversationParticipant.last_read_at.is_(None),
+                    Message.created_at > ConversationParticipant.last_read_at,
+                ),
+            )
+            .group_by(Message.conversation_id)
+            .all()
+        )
+        for conv_id, cnt in rows:
+            counts[conv_id] = cnt
+
+        return counts

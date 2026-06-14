@@ -352,7 +352,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                     ),
                                     alignment: Alignment.center,
                                     child: Text(
-                                      isFollowing ? 'Following' : 'Follow',
+                                      isFollowing
+                                          ? 'Following'
+                                          : (profile.followsBack
+                                              ? 'Follow back'
+                                              : 'Follow'),
                                       style: GoogleFonts.inter(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,

@@ -103,6 +103,7 @@ class BrowseUser {
   final String bannerColor;
   final String? bannerImageB64;
   final bool isFollowing;
+  final bool followsBack;
   final int followersCount;
   final int followingCount;
   final int piecesCount;
@@ -122,6 +123,7 @@ class BrowseUser {
     this.bannerColor = '#4A3F35',
     this.bannerImageB64,
     this.isFollowing = false,
+    this.followsBack = false,
     this.followersCount = 0,
     this.followingCount = 0,
     this.piecesCount = 0,
@@ -142,6 +144,7 @@ class BrowseUser {
         bannerColor: j['banner_color'] as String? ?? '#4A3F35',
         bannerImageB64: j['banner_image_b64'] as String?,
         isFollowing: j['is_following'] as bool? ?? false,
+        followsBack: j['follows_back'] as bool? ?? false,
         followersCount: j['followers_count'] as int? ?? 0,
         followingCount: j['following_count'] as int? ?? 0,
         piecesCount: j['pieces_count'] as int? ?? 0,
@@ -225,9 +228,14 @@ class BrowseService extends ChangeNotifier {
 
       final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
       final data = await ApiClient.instance.get('/browse/users?$query');
-      _users = (data as List)
+      final newUsers = (data as List)
           .map((j) => BrowseUser.fromJson(j as Map<String, dynamic>))
           .toList();
+      if (offset > 0) {
+        _users = [..._users, ...newUsers];
+      } else {
+        _users = newUsers;
+      }
       notifyListeners();
     } catch (_) {
       // Keep existing

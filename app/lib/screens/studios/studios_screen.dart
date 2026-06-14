@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -39,8 +40,16 @@ class StudiosScreen extends StatefulWidget {
 class _StudiosScreenState extends State<StudiosScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _anim;
+  final _searchController = TextEditingController();
+  Timer? _debounce;
 
   bool _initialLoading = true;
+  List<BrowseUser> _studios = [];
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _offset = 0;
+  static const _pageSize = 6;
+  static const _maxStudios = 20;
 
   @override
   void initState() {
@@ -49,24 +58,58 @@ class _StudiosScreenState extends State<StudiosScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
+    _resetAndFetch();
+  }
+
+  void _onSearchChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _resetAndFetch);
+  }
+
+  void _resetAndFetch() {
+    _offset = 0;
+    _hasMore = true;
+    _studios = [];
     _fetchStudios();
   }
 
   Future<void> _fetchStudios() async {
-    await BrowseService.instance.fetchUsers();
+    if (_offset == 0) setState(() => _initialLoading = true);
+    final query = _searchController.text.trim();
+    await BrowseService.instance.fetchUsers(
+      search: query.isEmpty ? null : query,
+      offset: _offset,
+      limit: _pageSize,
+    );
     if (!mounted) return;
+    final allUsers = BrowseService.instance.users;
     // Seed follow state from API response
-    for (final u in BrowseService.instance.users) {
+    for (final u in allUsers) {
       if (u.isFollowing) {
         FollowService.instance.markFollowing(u.id);
       }
     }
-    setState(() => _initialLoading = false);
+    final newCount = allUsers.length - _studios.length;
+    setState(() {
+      _studios = List.of(allUsers);
+      _offset = _studios.length;
+      _hasMore = newCount >= _pageSize && _studios.length < _maxStudios;
+      _initialLoading = false;
+    });
     _anim.forward();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    await _fetchStudios();
+    if (mounted) setState(() => _loadingMore = false);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
     _anim.dispose();
     super.dispose();
   }
@@ -94,34 +137,111 @@ class _StudiosScreenState extends State<StudiosScreen>
       appBar: const SharedAppBar(currentRoute: '/studios'),
       body: _initialLoading
           ? const Center(child: LoadingSpinner())
-          : ListenableBuilder(
-              listenable: BrowseService.instance,
-              builder: (context, _) {
-                final users = BrowseService.instance.users;
-                return SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      FadeTransition(
-                        opacity: _fade(0.0, 0.5),
-                        child: SlideTransition(
-                          position: _slide(0.0, 0.5),
-                          child: _StudiosHeader(userCount: users.length),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      FadeTransition(
-                        opacity: _fade(0.2, 0.7),
-                        child: SlideTransition(
-                          position: _slide(0.2, 0.7),
-                          child: _StudioGrid(users: users),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                    ],
+          : SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FadeTransition(
+                    opacity: _fade(0.0, 0.5),
+                    child: SlideTransition(
+                      position: _slide(0.0, 0.5),
+                      child: _StudiosHeader(userCount: _studios.length),
+                    ),
                   ),
-                );
-              },
+                  const SizedBox(height: 20),
+
+                  // ── Search input ──
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      style: GoogleFonts.inter(
+                        fontSize: 14.5,
+                        color: AppColors.inkStrong,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Search studios...',
+                        hintStyle: GoogleFonts.inter(
+                          fontSize: 14.5,
+                          color: AppColors.muted,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(999),
+                          borderSide: const BorderSide(
+                              color: AppColors.hairline, width: 1.0),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(999),
+                          borderSide: const BorderSide(
+                              color: AppColors.ink, width: 1.0),
+                        ),
+                        prefixIcon: const Padding(
+                          padding: EdgeInsets.only(left: 14, right: 8),
+                          child: Icon(Icons.search_rounded,
+                              size: 18, color: AppColors.muted),
+                        ),
+                        prefixIconConstraints:
+                            const BoxConstraints(minWidth: 0, minHeight: 0),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  FadeTransition(
+                    opacity: _fade(0.2, 0.7),
+                    child: SlideTransition(
+                      position: _slide(0.2, 0.7),
+                      child: _StudioGrid(users: _studios),
+                    ),
+                  ),
+
+                  // ── Load more ──
+                  if (_hasMore)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 20),
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: _loadingMore ? null : _loadMore,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 11),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                  color: AppColors.hairline, width: 1),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: _loadingMore
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                      color: AppColors.inkSoft,
+                                    ),
+                                  )
+                                : Text(
+                                    'Load more',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.inkSoft,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
     );
   }

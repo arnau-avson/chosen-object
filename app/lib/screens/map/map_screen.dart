@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -11,7 +9,6 @@ import '../../core/browse_service.dart';
 import '../../core/geocoding_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
-import '../product_detail/product_detail_screen.dart';
 
 // ═════════════════════════════════════════════════════════════
 // ── City cluster model ──────────────────────────────────────
@@ -40,12 +37,17 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen>
+    with TickerProviderStateMixin {
   final _mapCtrl = MapController();
-  final _searchController = TextEditingController();
   bool _loading = true;
   List<_CityCluster> _clusters = [];
-  _CityCluster? _selectedCluster;
+  AnimationController? _moveAnim;
+
+  // ── Persistent filter state ──
+  int _filterType = 0;       // 0=All, 1=Buy, 2=Rent
+  int _filterCategory = 0;   // 0=All, 1..N = category
+  int _filterSort = 0;       // 0=Newest, 1=Price↑, 2=Price↓
 
   @override
   void initState() {
@@ -53,10 +55,67 @@ class _MapScreenState extends State<MapScreen> {
     _loadPieces();
   }
 
-  Future<void> _loadPieces({String? search}) async {
+  /// Smoothly animate the map to [dest] at [zoom].
+  void _animatedMove(LatLng dest, double zoom) {
+    _moveAnim?.dispose();
+    final ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _moveAnim = ctrl;
+
+    final startLat = _mapCtrl.camera.center.latitude;
+    final startLng = _mapCtrl.camera.center.longitude;
+    final startZoom = _mapCtrl.camera.zoom;
+
+    final latTween = Tween(begin: startLat, end: dest.latitude);
+    final lngTween = Tween(begin: startLng, end: dest.longitude);
+    final zoomTween = Tween(begin: startZoom, end: zoom);
+
+    final curve = CurvedAnimation(parent: ctrl, curve: Curves.easeInOut);
+
+    ctrl.addListener(() {
+      _mapCtrl.move(
+        LatLng(latTween.evaluate(curve), lngTween.evaluate(curve)),
+        zoomTween.evaluate(curve),
+      );
+    });
+
+    ctrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.dismissed) {
+        ctrl.dispose();
+        if (_moveAnim == ctrl) _moveAnim = null;
+      }
+    });
+
+    ctrl.forward();
+  }
+
+  Future<void> _loadPieces() async {
     setState(() => _loading = true);
+
+    String? discipline;
+    if (_filterCategory > 0) {
+      const categories = [
+        'All', 'Ceramic', 'Furniture', 'Textiles', 'Lighting',
+        'Sculpture', 'Decor', 'Watercolour', 'Painting',
+      ];
+      discipline = categories[_filterCategory];
+    }
+
+    String? sort;
+    if (_filterSort == 1) sort = 'price_asc';
+    if (_filterSort == 2) sort = 'price_desc';
+
+    String? pieceType;
+    if (_filterType == 1) pieceType = 'buy';
+    if (_filterType == 2) pieceType = 'rent';
+
     await BrowseService.instance.fetchPieces(
-      search: search,
+      discipline: discipline,
+      sort: sort,
+      pieceType: pieceType,
       limit: 100,
     );
     await _buildClusters();
@@ -100,8 +159,9 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _onClusterTap(_CityCluster cluster) {
-    setState(() => _selectedCluster = cluster);
-    _mapCtrl.move(cluster.position, 10);
+    final currentZoom = _mapCtrl.camera.zoom;
+    final nextZoom = (currentZoom + 2).clamp(3.0, 17.0);
+    _animatedMove(cluster.position, nextZoom);
   }
 
   Future<void> _centerOnMe() async {
@@ -144,15 +204,10 @@ class _MapScreenState extends State<MapScreen> {
             const LocationSettings(accuracy: LocationAccuracy.medium),
       );
 
-      _mapCtrl.move(LatLng(pos.latitude, pos.longitude), 13);
+      _animatedMove(LatLng(pos.latitude, pos.longitude), 13);
     } catch (e) {
       showMsg('Could not get location: ${e.toString().split(':').last.trim()}');
     }
-  }
-
-  void _onSearch(String value) {
-    setState(() => _selectedCluster = null);
-    _loadPieces(search: value.isEmpty ? null : value);
   }
 
   void _showFilterSheet() {
@@ -161,16 +216,16 @@ class _MapScreenState extends State<MapScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => _MapFiltersModal(
-        onApply: (discipline, sort, pieceType) {
-          BrowseService.instance.fetchPieces(
-            discipline: discipline,
-            sort: sort,
-            pieceType: pieceType,
-            limit: 100,
-          ).then((_) async {
-            await _buildClusters();
-            if (mounted) setState(() {});
+        initialType: _filterType,
+        initialCategory: _filterCategory,
+        initialSort: _filterSort,
+        onApply: (type, category, sort) {
+          setState(() {
+            _filterType = type;
+            _filterCategory = category;
+            _filterSort = sort;
           });
+          _loadPieces();
         },
       ),
     );
@@ -178,17 +233,14 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    _moveAnim?.dispose();
     _mapCtrl.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height -
-        MediaQuery.of(context).padding.top -
-        kToolbarHeight;
 
     return Scaffold(
       backgroundColor: AppColors.bone,
@@ -196,61 +248,13 @@ class _MapScreenState extends State<MapScreen> {
       appBar: const SharedAppBar(currentRoute: '/map'),
       body: Column(
         children: [
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
 
-          // ── Search input (above the map) ───────────────────────
-          SizedBox(
-            width: screenWidth * 0.9,
-            child: TextField(
-              controller: _searchController,
-              onSubmitted: _onSearch,
-              style: GoogleFonts.inter(
-                fontSize: 14.5,
-                color: AppColors.inkStrong,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Search pieces or cities...',
-                hintStyle: GoogleFonts.inter(
-                  fontSize: 14.5,
-                  color: AppColors.muted,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: const BorderSide(
-                      color: AppColors.ink, width: 1.0),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: const BorderSide(
-                      color: AppColors.ink, width: 1.0),
-                ),
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 14, right: 8),
-                  child: Icon(
-                    Icons.search_rounded,
-                    size: 18,
-                    color: AppColors.muted,
-                  ),
-                ),
-                prefixIconConstraints:
-                    const BoxConstraints(minWidth: 0, minHeight: 0),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // ── Map container (90% width, 80% height) ──────────────
+          // ── Map container ──────────────────────────────────────
           Expanded(
             child: Center(
               child: Container(
                 width: screenWidth * 0.9,
-                height: screenHeight * 0.8,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.hairline, width: 1),
@@ -272,11 +276,6 @@ class _MapScreenState extends State<MapScreen> {
                           initialCenter: LatLng(41.3874, 2.1686),
                           initialZoom: 5.5,
                           minZoom: 3,
-                          onTap: (_, __) {
-                            if (_selectedCluster != null) {
-                              setState(() => _selectedCluster = null);
-                            }
-                          },
                         ),
                         children: [
                           TileLayer(
@@ -285,10 +284,10 @@ class _MapScreenState extends State<MapScreen> {
                             subdomains: const ['a', 'b', 'c', 'd'],
                             userAgentPackageName: 'com.chosenobject.app',
                             maxZoom: 19,
+                            keepBuffer: 8,
                           ),
                           MarkerLayer(
                             markers: _clusters.map((cluster) {
-                              final isSelected = cluster == _selectedCluster;
                               return Marker(
                                 point: cluster.position,
                                 width: 42,
@@ -297,7 +296,6 @@ class _MapScreenState extends State<MapScreen> {
                                   onTap: () => _onClusterTap(cluster),
                                   child: _ClusterPin(
                                     count: cluster.pieces.length,
-                                    selected: isSelected,
                                   ),
                                 ),
                               );
@@ -352,21 +350,6 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ),
 
-                      // ── Carousel (selected city pieces) ────────
-                      if (_selectedCluster != null)
-                        Positioned(
-                          bottom: 12,
-                          left: 0,
-                          right: 0,
-                          child: SizedBox(
-                            height: 170,
-                            child: _PiecesCarousel(
-                              cluster: _selectedCluster!,
-                              onClose: () =>
-                                  setState(() => _selectedCluster = null),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -452,16 +435,14 @@ class _MapActionButton extends StatelessWidget {
 
 class _ClusterPin extends StatelessWidget {
   final int count;
-  final bool selected;
 
-  const _ClusterPin({required this.count, this.selected = false});
+  const _ClusterPin({required this.count});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+    return Container(
       decoration: BoxDecoration(
-        color: selected ? AppColors.accent : AppColors.inkStrong,
+        color: AppColors.inkStrong,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2.5),
         boxShadow: [
@@ -487,186 +468,21 @@ class _ClusterPin extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── Pieces carousel (selected city) ─────────────────────────
-// ═════════════════════════════════════════════════════════════
-
-class _PiecesCarousel extends StatelessWidget {
-  final _CityCluster cluster;
-  final VoidCallback onClose;
-
-  const _PiecesCarousel({required this.cluster, required this.onClose});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 14,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 10, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.location_on_rounded,
-                    size: 14, color: AppColors.accent),
-                const SizedBox(width: 5),
-                Text(
-                  cluster.city,
-                  style: GoogleFonts.fraunces(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.inkStrong,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '· ${cluster.pieces.length} piece${cluster.pieces.length == 1 ? '' : 's'}',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    color: AppColors.muted,
-                  ),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: onClose,
-                  behavior: HitTestBehavior.opaque,
-                  child: const Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Icon(Icons.close_rounded,
-                        size: 16, color: AppColors.muted),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Horizontal list ──
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: cluster.pieces.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, index) {
-                return _PieceChip(piece: cluster.pieces[index]);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════
-// ── Piece chip in carousel ──────────────────────────────────
-// ═════════════════════════════════════════════════════════════
-
-class _PieceChip extends StatelessWidget {
-  final BrowsePiece piece;
-
-  const _PieceChip({required this.piece});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) =>
-                ProductDetailScreen(pieceId: piece.id),
-            transitionsBuilder: (_, animation, __, child) =>
-                FadeTransition(opacity: animation, child: child),
-            transitionDuration: const Duration(milliseconds: 300),
-          ),
-        );
-      },
-      child: Container(
-        width: 120,
-        decoration: BoxDecoration(
-          color: AppColors.bone,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.hairline, width: 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Image ──
-            Expanded(
-              child: ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(9)),
-                child: piece.coverImageB64 != null
-                    ? Image.memory(
-                        base64Decode(piece.coverImageB64!),
-                        width: 120,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        color: AppColors.hairline2,
-                        child: const Center(
-                          child: Icon(Icons.image_outlined,
-                              size: 22, color: AppColors.muted),
-                        ),
-                      ),
-              ),
-            ),
-            // ── Info ──
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    piece.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.inkStrong,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    piece.priceFormatted,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════
 // ── Map filters modal ───────────────────────────────────────
 // ═════════════════════════════════════════════════════════════
 
 class _MapFiltersModal extends StatefulWidget {
-  final void Function(String? discipline, String? sort, String? pieceType)
-      onApply;
+  final int initialType;
+  final int initialCategory;
+  final int initialSort;
+  final void Function(int type, int category, int sort) onApply;
 
-  const _MapFiltersModal({required this.onApply});
+  const _MapFiltersModal({
+    required this.initialType,
+    required this.initialCategory,
+    required this.initialSort,
+    required this.onApply,
+  });
 
   @override
   State<_MapFiltersModal> createState() => _MapFiltersModalState();
@@ -674,7 +490,6 @@ class _MapFiltersModal extends StatefulWidget {
 
 class _MapFiltersModalState extends State<_MapFiltersModal> {
   static const _types = ['All', 'Buy', 'Rent'];
-  int _selectedType = 0;
 
   static const _categories = [
     'All',
@@ -687,38 +502,15 @@ class _MapFiltersModalState extends State<_MapFiltersModal> {
     'Watercolour',
     'Painting',
   ];
-  int _selectedCategory = 0;
 
   static const _sortOptions = ['Newest', 'Price ↑', 'Price ↓'];
-  int _selectedSort = 0;
+
+  late int _selectedType = widget.initialType;
+  late int _selectedCategory = widget.initialCategory;
+  late int _selectedSort = widget.initialSort;
 
   void _apply() {
-    String? discipline;
-    if (_selectedCategory > 0) {
-      discipline = _categories[_selectedCategory];
-    }
-
-    String? sort;
-    switch (_selectedSort) {
-      case 1:
-        sort = 'price_asc';
-        break;
-      case 2:
-        sort = 'price_desc';
-        break;
-    }
-
-    String? pieceType;
-    switch (_selectedType) {
-      case 1:
-        pieceType = 'buy';
-        break;
-      case 2:
-        pieceType = 'rent';
-        break;
-    }
-
-    widget.onApply(discipline, sort, pieceType);
+    widget.onApply(_selectedType, _selectedCategory, _selectedSort);
     Navigator.of(context).pop();
   }
 
