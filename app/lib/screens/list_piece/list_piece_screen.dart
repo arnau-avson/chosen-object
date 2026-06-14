@@ -211,6 +211,9 @@ class _ListPieceScreenState extends State<ListPieceScreen>
           'edition': _editionCtrl.text.trim().isNotEmpty
               ? _editionCtrl.text.trim()
               : null,
+          'description': _descriptionCtrl.text.trim().isNotEmpty
+              ? _descriptionCtrl.text.trim()
+              : null,
           'price_cents': price * 100,
           'old_price_cents': oldPrice != null ? oldPrice * 100 : null,
           'cost_price_cents': costPrice != null ? costPrice * 100 : null,
@@ -1174,6 +1177,9 @@ class _ListPieceScreenState extends State<ListPieceScreen>
                   edition: _editionCtrl.text.trim().isNotEmpty
                       ? _editionCtrl.text.trim()
                       : null,
+                  description: _descriptionCtrl.text.trim().isNotEmpty
+                      ? _descriptionCtrl.text.trim()
+                      : null,
                   rental: _rental,
                 ),
               ),
@@ -1315,6 +1321,7 @@ class _PreviewContent extends StatefulWidget {
   final String? oldPrice;
   final String? discipline;
   final String? edition;
+  final String? description;
   final bool rental;
 
   const _PreviewContent({
@@ -1326,6 +1333,7 @@ class _PreviewContent extends StatefulWidget {
     this.oldPrice,
     this.discipline,
     this.edition,
+    this.description,
     this.rental = false,
   });
 
@@ -1653,7 +1661,65 @@ class _PreviewContentState extends State<_PreviewContent> {
           ),
 
           // ═══════════════════════════════════════════════════
-          // ── 5. № 02 — Specifications ─────────────────────
+          // ── 5. № 01 — About ───────────────────────────────
+          // ═══════════════════════════════════════════════════
+          if (widget.description != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '№ 01',
+                          style: GoogleFonts.fraunces(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.gold,
+                            height: 1.3,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' — About',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.muted,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    widget.description!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.inkSoft,
+                      height: 1.7,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          if (widget.description != null) ...[
+            const SizedBox(height: 24),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              child: Divider(color: AppColors.hairline, height: 1),
+            ),
+          ],
+
+          // ═══════════════════════════════════════════════════
+          // ── 6. № 02 — Specifications ─────────────────────
           // ═══════════════════════════════════════════════════
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
@@ -1664,7 +1730,7 @@ class _PreviewContentState extends State<_PreviewContent> {
                   text: TextSpan(
                     children: [
                       TextSpan(
-                        text: '№ 01',
+                        text: widget.description != null ? '№ 02' : '№ 01',
                         style: GoogleFonts.fraunces(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,

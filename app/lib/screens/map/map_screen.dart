@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +11,7 @@ import '../../core/browse_service.dart';
 import '../../core/geocoding_service.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/shared_app_bar.dart';
+import '../product_detail/product_detail_screen.dart';
 
 // ═════════════════════════════════════════════════════════════
 // ── City cluster model ──────────────────────────────────────
@@ -158,10 +161,115 @@ class _MapScreenState extends State<MapScreen>
     _clusters = map.values.toList();
   }
 
+  static const double _zoomThreshold = 10.0;
+
   void _onClusterTap(_CityCluster cluster) {
     final currentZoom = _mapCtrl.camera.zoom;
-    final nextZoom = (currentZoom + 2).clamp(3.0, 17.0);
-    _animatedMove(cluster.position, nextZoom);
+
+    if (currentZoom >= _zoomThreshold) {
+      // Already zoomed in enough — show products
+      _showClusterPieces(cluster);
+    } else {
+      // Zoom in towards the cluster
+      final nextZoom = (currentZoom + 2).clamp(3.0, _zoomThreshold);
+      _animatedMove(cluster.position, nextZoom);
+    }
+  }
+
+  void _showClusterPieces(_CityCluster cluster) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.45,
+        minChildSize: 0.25,
+        maxChildSize: 0.8,
+        builder: (context, scrollCtrl) => Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            children: [
+              // ── Handle + header ──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Column(
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.hairline,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Text(
+                          cluster.city,
+                          style: GoogleFonts.fraunces(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.inkStrong,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${cluster.pieces.length} pieces',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: const Icon(Icons.close_rounded,
+                              size: 20, color: AppColors.muted),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+              // ── Piece list ──
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  itemCount: cluster.pieces.length,
+                  separatorBuilder: (_, _) => const Divider(
+                    height: 1,
+                    color: AppColors.hairline,
+                  ),
+                  itemBuilder: (context, i) {
+                    final piece = cluster.pieces[i];
+                    return _ClusterPieceTile(
+                      piece: piece,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        Navigator.of(this.context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProductDetailScreen(pieceId: piece.id),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _centerOnMe() async {
@@ -461,6 +569,80 @@ class _ClusterPin extends StatelessWidget {
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── Cluster piece tile ──────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+
+class _ClusterPieceTile extends StatelessWidget {
+  final BrowsePiece piece;
+  final VoidCallback onTap;
+
+  const _ClusterPieceTile({required this.piece, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            // ── Cover image ──
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 52,
+                height: 52,
+                child: piece.coverImageB64 != null
+                    ? Image.memory(
+                        base64Decode(piece.coverImageB64!),
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        color: AppColors.hairline,
+                        child: const Icon(Icons.image_outlined,
+                            size: 20, color: AppColors.muted),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // ── Text info ──
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    piece.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    piece.priceFormatted,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                size: 18, color: AppColors.muted),
+          ],
         ),
       ),
     );
